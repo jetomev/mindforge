@@ -9,6 +9,7 @@ set -uo pipefail
 # ~/.config/mindforge/config is local and gitignored; see config.example.
 [ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
 
+VERSION="0.1.1"
 STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
 PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"
 # Claude Code encodes the working directory into the memory path: / becomes -
@@ -344,6 +345,7 @@ drift() {
 }
 
 case "${1:-brief}" in
+  -V|--version|version) printf 'mindforge %s\n' "$VERSION" ;;
   brief) [ "${2:-}" = "--headline" ] && headline || full ;;
   rot)           rot ;;
   session-start) session_start ;;
@@ -356,6 +358,7 @@ usage:
   mindforge wrap "<focus>" "<b1>|<b2>"   close the session deliberately
   mindforge drift "<what slipped>"       log a drift observation
   mindforge session-start|session-end    (called by hooks)
+  mindforge --version
 USAGE
      exit 2 ;;
 esac
