@@ -39,4 +39,7 @@ so the mistake becomes impossible or visible — do not write a better reminder.
 | L2 | `<repo>/CLAUDE.md` | how *this* project builds, tests, ships |
 | L3 | memory + repo docs | history, decisions, why |
 
+**Read the L1 file BEFORE acting in its domain — not after, not if it seems
+necessary.** L1 does not load itself; that instruction is the trigger.
+
 Start of session: run `mindforge brief`. End of session: `mindforge wrap`.
