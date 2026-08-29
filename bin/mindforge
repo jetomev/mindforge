@@ -112,6 +112,7 @@ full() {
       "$(find "$VAULT" -name '*.md' -printf '%TY-%Tm-%Td %f\n' 2>/dev/null | sort -r | head -1)"
   fi
   echo
+  printf '%sRot check%s\n' "$B" "$O"; rot; echo
   printf '%s%s%s\n' "$D" "$(rule_of_the_day)" "$O"
 }
 
@@ -124,6 +125,102 @@ rule_of_the_day() {
   echo "${rules[$(( $(date +%j) % ${#rules[@]} ))]}"
 }
 
+
+
+# --------------------------------------------------------------------- rot --
+# Rot is silent by definition: nothing breaks, so nothing tells you.
+# Every check is local and fast. Each finding prints as "CODE<TAB>message".
+rot_checks() {
+  # R1 · PKGBUILD version vs the repo's latest tag
+  for pb in "$PROJECTS"/*/PKGBUILD; do
+    [ -f "$pb" ] || continue
+    local d=${pb%/PKGBUILD} name; name=$(basename "$d")
+    [ -d "$d/.git" ] || continue
+    local pv tv
+    pv=$(grep -m1 '^pkgver=' "$pb" | cut -d= -f2)
+    tv=$(git -C "$d" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+    [ -n "$tv" ] && [ "$pv" != "$tv" ] && \
+      printf 'R1\tPKGBUILD in %s says %s, latest tag is %s\n' "$name" "$pv" "$tv"
+  done
+
+  # R2 · repo-root PKGBUILD vs its AUR twin -- CONTENT, not version.
+  # Both files said 1.3.1 on 2026-08-29 while one fetched an unsigned tarball.
+  for pb in "$PROJECTS"/*/PKGBUILD; do
+    [ -f "$pb" ] || continue
+    local d=${pb%/PKGBUILD} name; name=$(basename "$d")
+    for twin in "$PROJECTS/aur-$name/PKGBUILD" "$PROJECTS/aur-$name-remote/PKGBUILD"; do
+      [ -f "$twin" ] || continue
+      for key in source sha256sums validpgpkeys; do
+        local a b
+        a=$(grep -c "^$key" "$pb"); b=$(grep -c "^$key" "$twin")
+        if [ "$a" != "$b" ]; then
+          printf 'R2\t%s root PKGBUILD diverges from AUR on %s\n' "$name" "$key"
+        elif [ "$key" = source ] && \
+             ! diff -q <(grep -A2 '^source' "$pb") <(grep -A2 '^source' "$twin") >/dev/null; then
+          printf 'R2\t%s root PKGBUILD source differs from AUR\n' "$name"
+        fi
+      done
+      break
+    done
+  done
+
+  # R3 · uncommitted or unpushed work
+  for r in "$PROJECTS"/*/.git; do
+    [ -d "$r" ] || continue
+    local d=${r%/.git} n; n=$(basename "$d")
+    local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+    [ "${a:-0}" -gt 0 ] 2>/dev/null && printf 'R3\t%s has %s unpushed commit(s)\n' "$n" "$a"
+  done
+
+  # R4 · memory index out of step with the files it indexes
+  if [ -d "$MEM" ]; then
+    local files idx
+    # Name the orphans rather than comparing counts: an index line can carry
+    # more than one link, so a count comparison over-reports.
+    local orphans=""
+    for f in "$MEM"/*.md; do
+      local b; b=$(basename "$f")
+      case "$b" in MEMORY.md|archive_index_*) continue;; esac
+      grep -qF "($b)" "$MEM/MEMORY.md" 2>/dev/null || orphans="$orphans $b"
+    done
+    [ -n "$orphans" ] && \
+      printf 'R4\tmemory file(s) missing from MEMORY.md:%s\n' "$orphans"
+  fi
+
+  # R5 · L0 over budget -- dilution looks exactly like drift
+  local l0; l0=$(grep -c '' "$HOME/.claude/CLAUDE.md" 2>/dev/null || echo 0)
+  [ "$l0" -gt 60 ] && printf 'R5\tL0 is %s lines, over the 60-line budget\n' "$l0"
+
+  # R6 · queue points at a project that is not there
+  while IFS=$'\t' read -r proj _; do
+    case "$proj" in \#*|@*|"") continue;; esac
+    [ -d "$PROJECTS/$proj" ] || printf 'R6\tqueue names %s, which is not in %s\n' "$proj" "$PROJECTS"
+  done < "$STATE/queue.md"
+}
+
+# Persist findings so "still broken" can be distinguished from "new today".
+# Three sessions in a row promotes a finding to the top of the brief.
+rot() {
+  local log="$STATE/rot.log" today; today=$(date +%F)
+  local found; found=$(rot_checks)
+  if [ -n "$found" ]; then
+    printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
+      printf '%s\t%s\t%s\n' "$today" "$code" "$msg" >> "$log"
+    done
+  fi
+  if [ -z "$found" ]; then
+    printf '  %snothing rotting%s\n' "$G" "$O"; return 0
+  fi
+  printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
+    # count DISTINCT days this exact finding has appeared
+    local seen; seen=$(grep -F "	$code	$msg" "$log" 2>/dev/null | cut -f1 | sort -u | wc -l)
+    if [ "$seen" -ge 3 ]; then
+      printf '  %s%s  %s%s  %s(%s sessions -- fix it)%s\n' "$R" "$code" "$msg" "$O" "$R" "$seen" "$O"
+    else
+      printf '  %s%s%s  %s\n' "$Y" "$code" "$O" "$msg"
+    fi
+  done
+}
 
 # ---------------------------------------------------------------- closeout --
 MARK="$STATE/.session-start"
@@ -202,6 +299,7 @@ drift() {
 
 case "${1:-brief}" in
   brief) [ "${2:-}" = "--headline" ] && headline || full ;;
+  rot)           rot ;;
   session-start) session_start ;;
   session-end)   session_end ;;
   wrap)          shift; wrap "$@" ;;
