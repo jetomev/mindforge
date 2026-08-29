@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# mindForge -- orientation and closeout for working with an AI companion.
+#   mindforge brief [--headline]   what is true right now
+#   mindforge wrap                 close the session (step 5)
+#   mindforge drift "<note>"       log a drift observation (step 5)
+set -uo pipefail
+
+# Paths come from config, never from this file -- it is published.
+# ~/.config/mindforge/config is local and gitignored; see config.example.
+[ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
+
+STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
+PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"
+# Claude Code encodes the working directory into the memory path: / becomes -
+MEM="${MINDFORGE_MEMORY:-$HOME/.claude/projects/$(echo "$HOME" | tr '/' '-')/memory}"
+VAULT="${MINDFORGE_VAULT:-}"
+REMOTE="$STATE/remote.json"
+
+B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\033[0m'
+
+days_since() { echo $(( ( $(date +%s) - $(date -d "$1" +%s) ) / 86400 )); }
+
+last_session() { grep -v '^#' "$STATE/sessions.log" 2>/dev/null | grep -v '^$' | tail -1; }
+
+headline() {
+  printf '%s%s%s · %s\n' "$B" "$(date '+%a %Y-%m-%d')" "$O" "$(date '+%H:%M')"
+  local L; L=$(last_session)
+  if [ -n "$L" ]; then
+    local d f n; d=$(cut -f1 <<<"$L"); f=$(cut -f4 <<<"$L"); n=$(days_since "$d")
+    case $n in 0) when="today";; 1) when="yesterday";; *) when="$n days ago";; esac
+    printf 'last session: %s (%s) — %s\n' "$when" "$(cut -f2 <<<"$L")–$(cut -f3 <<<"$L")" "$f"
+  else
+    printf '%slast session: none recorded%s\n' "$D" "$O"
+  fi
+  # rot line
+  local dirty=0 unpushed=0 n=0
+  for r in "$PROJECTS"/*/.git; do
+    [ -d "$r" ] || continue; local d=${r%/.git}; n=$((n+1))
+    [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && dirty=$((dirty+1))
+    local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+    [ "${a:-0}" -gt 0 ] 2>/dev/null && unpushed=$((unpushed+1))
+  done
+  if [ $dirty -eq 0 ] && [ $unpushed -eq 0 ]; then
+    printf '%s%d repos clean · nothing unpushed%s' "$G" "$n" "$O"
+  else
+    printf '%s%d dirty · %d unpushed%s' "$Y" "$dirty" "$unpushed" "$O"
+  fi
+  if [ -f "$REMOTE" ]; then
+    printf ' · remote data %s min old' "$(( ( $(date +%s) - $(stat -c %Y "$REMOTE") ) / 60 ))"
+  else
+    printf ' · %sno remote cache (Stage 2)%s' "$D" "$O"
+  fi
+  echo
+}
+
+full() {
+  headline; echo
+  local L; L=$(last_session)
+  if [ -n "$L" ]; then
+    printf '%sLast time%s\n' "$B" "$O"
+    cut -f5 <<<"$L" | tr '|' '\n' | sed 's/^/  · /'
+    echo
+  fi
+
+  printf '%sProjects%s\n' "$B" "$O"
+  printf '  %-16s %-10s %-46s %s\n' "REPO" "LAST" "NEXT" "STATE"
+  while IFS=$'\t' read -r proj next impact block; do
+    case "$proj" in \#*|"") continue;; esac
+    local d="$PROJECTS/$proj" last="-" st="${G}clean${O}"
+    if [ -d "$d/.git" ]; then
+      last=$(git -C "$d" log -1 --format=%cs 2>/dev/null)
+      [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && st="${Y}dirty${O}"
+    else last="${D}no repo${O}"; fi
+    case "$block" in
+      waits:*) st="${Y}waits${O}" ;;
+      blocks:*) st="${G}clears${O}" ;;
+    esac
+    printf '  %-16s %-10s %-46s %b\n' "$proj" "$last" "${next:0:46}" "$st"
+  done < "$STATE/queue.md"
+  echo
+
+  printf '%sRecommended first%s\n' "$B" "$O"
+  awk -F'\t' '!/^#/ && NF>=4 {
+        w = $3; if ($4 ~ /^blocks:/) w += 2; if ($4 ~ /^waits:/) w -= 5;
+        print w"\t"$1"\t"$2"\t"$4 }' "$STATE/queue.md" \
+    | sort -rn | head -2 \
+    | while IFS=$'\t' read -r i p n b; do
+        printf '  %s%s%s — %s\n' "$B" "$p" "$O" "$n"
+        case "$b" in
+          blocks:*) printf '    %sunblocks %s — do this first%s\n' "$Y" "${b#blocks:}" "$O" ;;
+          waits:*)  printf '    %swaiting on %s%s\n' "$Y" "${b#waits:}" "$O" ;;
+        esac
+      done
+  echo
+
+  printf '%sState%s\n' "$B" "$O"
+  printf '  memory     %s files, newest %s\n' \
+    "$(ls "$MEM"/*.md 2>/dev/null | wc -l)" \
+    "$(date -r "$(ls -t "$MEM"/*.md 2>/dev/null | head -1)" '+%Y-%m-%d %H:%M' 2>/dev/null)"
+  printf '  L0         %s/60 lines\n' "$(grep -c '' "$HOME/.claude/CLAUDE.md" 2>/dev/null || echo 0)"
+  printf '  L1         %s domains\n' "$(ls "$HOME"/.claude/rules/*.md 2>/dev/null | wc -l)"
+  if [ -n "$VAULT" ] && [ -d "$VAULT" ]; then
+    printf '  vault      newest %s\n' \
+      "$(find "$VAULT" -name '*.md' -printf '%TY-%Tm-%Td %f\n' 2>/dev/null | sort -r | head -1)"
+  fi
+  echo
+  printf '%s%s%s\n' "$D" "$(rule_of_the_day)" "$O"
+}
+
+rule_of_the_day() {
+  # User content -- lives in state, never in this published file.
+  local f="$STATE/rules.txt"
+  [ -r "$f" ] || return 0
+  mapfile -t rules < <(grep -vE '^[[:space:]]*(#|$)' "$f")
+  [ "${#rules[@]}" -eq 0 ] && return 0
+  echo "${rules[$(( $(date +%j) % ${#rules[@]} ))]}"
+}
+
+case "${1:-brief}" in
+  brief) [ "${2:-}" = "--headline" ] && headline || full ;;
+  wrap|drift) echo "mindforge: '$1' lands in step 5." ;;
+  *) echo "usage: mindforge brief [--headline]" >&2; exit 2 ;;
+esac

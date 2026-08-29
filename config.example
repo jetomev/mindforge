@@ -1,0 +1,7 @@
+# mindForge · copy to ~/.config/mindforge/config and edit. Never committed.
+# Every value is optional; sensible defaults apply.
+
+# MINDFORGE_STATE="$HOME/.claude/state"        # session log + project queue
+# MINDFORGE_PROJECTS="$HOME/Programs"          # where your repos live
+# MINDFORGE_MEMORY="..."                       # default: derived from $HOME
+# MINDFORGE_VAULT="$HOME/Notes"                # notes vault; unset = skipped

@@ -1,0 +1,6 @@
+# Copy to $MINDFORGE_STATE/rules.txt. One working rule per line.
+# `mindforge brief` surfaces one per day, rotating -- so a standing rule
+# stays visible without becoming wallpaper.
+One command per turn - intro, command, expected result, then stop.
+Verify on the machine. A claim you can check is not a claim you assert.
+When a rule keeps breaking, change the design, not the reminder.
