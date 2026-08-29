@@ -18,7 +18,7 @@ REMOTE="$STATE/remote.json"
 
 B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\033[0m'
 # Hook output is consumed as plain text, not rendered -- escapes would be noise.
-[ -t 1 ] || { B=""; D=""; G=""; Y=""; R=""; O=""; }
+[ -t 1 ] || [ -n "${FORCE_COLOUR:-}" ] || { B=""; D=""; G=""; Y=""; R=""; O=""; }
 
 days_since() { echo $(( ( $(date +%s) - $(date -d "$1" +%s) ) / 86400 )); }
 
@@ -131,6 +131,14 @@ MARK="$STATE/.session-start"
 session_start() {
   # date(1) does not interpret \t -- printf must build the row.
   printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MARK"
+  # SessionStart stdout goes into the assistant's CONTEXT, not to the screen.
+  # To be visible to the human as well, write a coloured copy straight to the
+  # terminal. Silently skipped when there is no tty (SDK, CI, print mode).
+  # -w is not enough: /dev/tty can exist yet refuse to open (no controlling
+  # terminal). Probe by actually opening it, and stay silent if it fails.
+  if ( : > /dev/tty ) 2>/dev/null; then
+    ( FORCE_COLOUR=1 headline > /dev/tty ) 2>/dev/null || true
+  fi
   headline
 }
 
