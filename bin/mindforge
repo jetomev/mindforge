@@ -17,6 +17,8 @@ VAULT="${MINDFORGE_VAULT:-}"
 REMOTE="$STATE/remote.json"
 
 B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\033[0m'
+# Hook output is consumed as plain text, not rendered -- escapes would be noise.
+[ -t 1 ] || { B=""; D=""; G=""; Y=""; R=""; O=""; }
 
 days_since() { echo $(( ( $(date +%s) - $(date -d "$1" +%s) ) / 86400 )); }
 
@@ -80,8 +82,14 @@ full() {
   echo
 
   printf '%sRecommended first%s\n' "$B" "$O"
-  awk -F'\t' '!/^#/ && NF>=4 {
-        w = $3; if ($4 ~ /^blocks:/) w += 2; if ($4 ~ /^waits:/) w -= 5;
+  awk -F'\t' '
+      /^@priority/ { n=split($0,P," "); for(i=2;i<=n;i++) rank[P[i]]=n-i+1; next }
+      /^#/ || NF<4 { next }
+      # Project priority DOMINATES (x10): nog outranks any Forge app,
+      # so no amount of impact or unblocking reorders across projects.
+      # Impact and blocks/waits order things within that.
+      { w = (rank[$1] ? rank[$1] : 0) * 10 + $3;
+        if ($4 ~ /^blocks:/) w += 2; if ($4 ~ /^waits:/) w -= 5;
         print w"\t"$1"\t"$2"\t"$4 }' "$STATE/queue.md" \
     | sort -rn | head -2 \
     | while IFS=$'\t' read -r i p n b; do
@@ -116,8 +124,72 @@ rule_of_the_day() {
   echo "${rules[$(( $(date +%j) % ${#rules[@]} ))]}"
 }
 
+
+# ---------------------------------------------------------------- closeout --
+MARK="$STATE/.session-start"
+
+session_start() {
+  # date(1) does not interpret \t -- printf must build the row.
+  printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MARK"
+  headline
+}
+
+# Append one row. Fields: date start end focus bullets kind
+log_row() {
+  local start_d start_t
+  if [ -r "$MARK" ]; then start_d=$(cut -f1 "$MARK"); start_t=$(cut -f2 "$MARK")
+  else start_d=$(date +%F); start_t=$(date +%H:%M); fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$start_d" "$start_t" "$(date +%H:%M)" "$1" "$2" "$3" >> "$STATE/sessions.log"
+}
+
+# The deliberate closeout. Called with a focus and pipe-separated bullets.
+wrap() {
+  local focus="${1:-}" bullets="${2:-}"
+  [ -z "$focus" ] && { echo "usage: mindforge wrap \"<focus>\" \"<b1>|<b2>|...\"" >&2; exit 2; }
+  log_row "$focus" "$bullets" "wrapped"
+  rm -f "$MARK"
+  printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
+  printf '%s\n' "$bullets" | tr '|' '\n' | sed 's/^/  · /'
+  # Anything left unpushed is the thing a closeout exists to catch.
+  local warned=0
+  for r in "$PROJECTS"/*/.git; do
+    [ -d "$r" ] || continue; local d=${r%/.git}
+    local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+    if [ "${a:-0}" -gt 0 ] 2>/dev/null; then
+      printf '%s  ! %s has %s unpushed commit(s)%s\n' "$Y" "$(basename "$d")" "$a" "$O"; warned=1
+    fi
+  done
+  [ $warned -eq 0 ] && printf '%s  all repos pushed%s\n' "$D" "$O"
+}
+
+# The floor. Runs from the SessionEnd hook whether or not wrap was called.
+session_end() {
+  [ -r "$MARK" ] || exit 0          # already wrapped, or never started
+  log_row "(not wrapped)" "" "auto"
+  rm -f "$MARK"
+}
+
+# One keystroke when drift is caught. Data beats impressions.
+drift() {
+  local note="${*:-}"
+  [ -z "$note" ] && { echo "usage: mindforge drift \"<what slipped>\"" >&2; exit 2; }
+  printf '%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$note" >> "$STATE/drift.log"
+  printf '%slogged.%s %s drift note(s) so far.\n' "$Y" "$O" "$(grep -c . "$STATE/drift.log")"
+}
+
 case "${1:-brief}" in
   brief) [ "${2:-}" = "--headline" ] && headline || full ;;
-  wrap|drift) echo "mindforge: '$1' lands in step 5." ;;
-  *) echo "usage: mindforge brief [--headline]" >&2; exit 2 ;;
+  session-start) session_start ;;
+  session-end)   session_end ;;
+  wrap)          shift; wrap "$@" ;;
+  drift)         shift; drift "$@" ;;
+  *) cat >&2 <<'USAGE'
+usage:
+  mindforge brief [--headline]     what is true right now
+  mindforge wrap "<focus>" "<b1>|<b2>"   close the session deliberately
+  mindforge drift "<what slipped>"       log a drift observation
+  mindforge session-start|session-end    (called by hooks)
+USAGE
+     exit 2 ;;
 esac
