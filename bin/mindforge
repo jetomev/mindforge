@@ -136,10 +136,24 @@ session_start() {
   # terminal. Silently skipped when there is no tty (SDK, CI, print mode).
   # -w is not enough: /dev/tty can exist yet refuse to open (no controlling
   # terminal). Probe by actually opening it, and stay silent if it fails.
+  # Best-effort visible copy. Works only if the hook runner keeps a
+  # controlling terminal; silently skipped otherwise. Unproven on Claude Code.
   if ( : > /dev/tty ) 2>/dev/null; then
     ( FORCE_COLOUR=1 headline > /dev/tty ) 2>/dev/null || true
   fi
+
+  # The context copy needs a DIRECTIVE, not just data. Injected context with
+  # no instruction is inert: the first live test injected this briefing and
+  # the session ignored it, re-deriving the same facts with seven tool calls.
+  echo "<session-briefing>"
   headline
+  echo "</session-briefing>"
+  cat <<'DIRECTIVE'
+INSTRUCTION: open your first reply with the briefing above, rendered for the
+user -- they cannot see hook output. It is already accurate; do not re-derive
+it with tool calls. Then answer what they actually asked.
+Offer `mindforge brief` for the full picture; do not paste the full brief unasked.
+DIRECTIVE
 }
 
 # Append one row. Fields: date start end focus bullets kind
