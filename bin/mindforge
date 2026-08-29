@@ -67,7 +67,7 @@ full() {
   printf '%sProjects%s\n' "$B" "$O"
   printf '  %-16s %-10s %-46s %s\n' "REPO" "LAST" "NEXT" "STATE"
   while IFS=$'\t' read -r proj next impact block; do
-    case "$proj" in \#*|"") continue;; esac
+    case "$proj" in \#*|@*|"") continue;; esac   # @ lines are directives, not repos
     local d="$PROJECTS/$proj" last="-" st="${G}clean${O}"
     if [ -d "$d/.git" ]; then
       last=$(git -C "$d" log -1 --format=%cs 2>/dev/null)
