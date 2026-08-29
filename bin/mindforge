@@ -20,9 +20,23 @@ B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\03
 # Hook output is consumed as plain text, not rendered -- escapes would be noise.
 [ -t 1 ] || [ -n "${FORCE_COLOUR:-}" ] || { B=""; D=""; G=""; Y=""; R=""; O=""; }
 
-days_since() { echo $(( ( $(date +%s) - $(date -d "$1" +%s) ) / 86400 )); }
+# One malformed row must not take the whole headline down with it. v0.1.0
+# fed date(1) straight into arithmetic: a single bad field printed a raw
+# shell error where the briefing should be. Unknown is a legal answer here.
+days_since() {
+  local e; e=$(date -d "$1" +%s 2>/dev/null) || { echo "?"; return; }
+  echo $(( ( $(date +%s) - e ) / 86400 ))
+}
 
+# Two questions were conflated in v0.1.0 and answered by a single tail -1:
+#   when did I last work?    -> the last row, whatever kind it is
+#   what did I last finish?  -> the last WRAPPED row
+# Claude Desktop opens and closes sessions far more often than a terminal
+# does, so the log fills with short auto rows. One tail -1 lets that churn
+# bury the closeout: the v0.1.0 wrap sat 13 rows deep and "Last time" was
+# rendering empty while the bullets it wanted were right there in the file.
 last_session() { grep -v '^#' "$STATE/sessions.log" 2>/dev/null | grep -v '^$' | tail -1; }
+last_wrapped() { awk -F'\t' '$6=="wrapped"' "$STATE/sessions.log" 2>/dev/null | tail -1; }
 
 headline() {
   printf '%s%s%s · %s\n' "$B" "$(date '+%a %Y-%m-%d')" "$O" "$(date '+%H:%M')"
@@ -57,10 +71,11 @@ headline() {
 
 full() {
   headline; echo
-  local L; L=$(last_session)
-  if [ -n "$L" ]; then
-    printf '%sLast time%s\n' "$B" "$O"
-    cut -f5 <<<"$L" | tr '|' '\n' | sed 's/^/  · /'
+  local W; W=$(last_wrapped)
+  if [ -n "$W" ]; then
+    printf '%sLast time%s · %s\n' "$B" "$O" "$(cut -f1 <<<"$W")"
+    printf '  %s\n' "$(cut -f4 <<<"$W")"
+    cut -f5 <<<"$W" | tr '|' '\n' | grep -v '^$' | sed 's/^/    · /'
     echo
   fi
 
@@ -73,9 +88,12 @@ full() {
       last=$(git -C "$d" log -1 --format=%cs 2>/dev/null)
       [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && st="${Y}dirty${O}"
     else last="${D}no repo${O}"; fi
+    # A dependency is extra information, not a replacement. v0.1.0 assigned
+    # over $st here, so a dirty repo that also had a dependency printed
+    # "waits" and its dirt never surfaced anywhere in the table.
     case "$block" in
-      waits:*) st="${Y}waits${O}" ;;
-      blocks:*) st="${G}clears${O}" ;;
+      waits:*)  st="$st ${Y}waits${O}" ;;
+      blocks:*) st="$st ${G}clears${O}" ;;
     esac
     printf '  %-16s %-10s %-46s %b\n' "$proj" "$last" "${next:0:46}" "$st"
   done < "$STATE/queue.md"
@@ -205,7 +223,12 @@ rot() {
   local found; found=$(rot_checks)
   if [ -n "$found" ]; then
     printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
-      printf '%s\t%s\t%s\n' "$today" "$code" "$msg" >> "$log"
+      # Append once per day per finding. brief runs the rot check on every
+      # invocation, and on Desktop that is many times an hour; unguarded it
+      # grew two identical lines per run -- 17 lines carrying 2 real facts.
+      row=$(printf '%s\t%s\t%s' "$today" "$code" "$msg")
+      grep -qxF "$row" "$log" 2>/dev/null && continue
+      printf '%s\n' "$row" >> "$log"
     done
   fi
   if [ -z "$found" ]; then
@@ -233,8 +256,14 @@ session_start() {
   # terminal. Silently skipped when there is no tty (SDK, CI, print mode).
   # -w is not enough: /dev/tty can exist yet refuse to open (no controlling
   # terminal). Probe by actually opening it, and stay silent if it fails.
-  # Best-effort visible copy. Works only if the hook runner keeps a
-  # controlling terminal; silently skipped otherwise. Unproven on Claude Code.
+  # Best-effort visible copy, and terminal-only by nature. Proven absent on
+  # Claude Desktop 2026-08-29: its hook runner has no controlling terminal,
+  # the probe below fails, and the human sees nothing at launch. Still
+  # unproven inside a Claude Code terminal -- running `mindforge brief` by
+  # hand does not test this path, because that is a tty by definition.
+  # Parity therefore does NOT rest here. It rests on the DIRECTIVE below,
+  # which reaches the model identically on both surfaces. Treat anything
+  # this block prints as a bonus, never as the delivery mechanism.
   if ( : > /dev/tty ) 2>/dev/null; then
     ( FORCE_COLOUR=1 headline > /dev/tty ) 2>/dev/null || true
   fi
@@ -283,9 +312,26 @@ wrap() {
 }
 
 # The floor. Runs from the SessionEnd hook whether or not wrap was called.
+# Desktop churns sessions on its own -- 14 in one afternoon here, four of
+# them stamped 18:02-18:02. A session that recorded nothing is not a session,
+# and logging it only buries the ones that mattered. Below the floor the mark
+# is cleared and no row is written. If the elapsed time cannot be measured,
+# the row is written: an unmeasurable session is not a proven-empty one.
+MIN_SESSION_MIN="${MINDFORGE_MIN_SESSION_MIN:-2}"
+
 session_end() {
   [ -r "$MARK" ] || exit 0          # already wrapped, or never started
-  log_row "(not wrapped)" "" "auto"
+  local sd st epoch
+  sd=$(cut -f1 "$MARK"); st=$(cut -f2 "$MARK")
+  epoch=$(date -d "$sd $st" +%s 2>/dev/null || true)
+  if [ -z "${epoch:-}" ]; then
+    # Unmeasurable, so record it -- but never propagate the bad field into
+    # the log, where it would break every future headline.
+    printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MARK"
+    log_row "(not wrapped)" "" "auto"
+  elif [ $(( ( $(date +%s) - epoch ) / 60 )) -ge "$MIN_SESSION_MIN" ]; then
+    log_row "(not wrapped)" "" "auto"
+  fi
   rm -f "$MARK"
 }
 
