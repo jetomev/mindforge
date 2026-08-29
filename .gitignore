@@ -1,0 +1,8 @@
+# Nothing personal, ever. Generated instances stay out of the repo.
+*.local
+*.local.*
+scrub.local
+/local/
+/private/
+*.swp
+.DS_Store

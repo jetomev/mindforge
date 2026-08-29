@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# mindForge · pre-commit scrub
+#
+# Refuses any commit whose staged content carries personal or secret data.
+# Fails the commit, not the review.
+#
+# TWO LAYERS:
+#   1. Generic patterns, shipped in this file. Safe to publish -- they name
+#      shapes (an email, a private IP, a key header), never values.
+#   2. A LOCAL wordlist of literal terms -- real names, hostnames, addresses.
+#      That list is itself personal data, so it lives OUTSIDE the repo at
+#      ~/.config/mindforge/scrub.local and is never committed.
+#
+# Bypass is deliberate and loud: MINDFORGE_SCRUB=off git commit ...
+
+set -uo pipefail
+
+WORDLIST="${MINDFORGE_SCRUB_LIST:-$HOME/.config/mindforge/scrub.local}"
+RED=$'\033[31m'; YEL=$'\033[33m'; DIM=$'\033[2m'; OFF=$'\033[0m'
+
+if [ "${MINDFORGE_SCRUB:-on}" = "off" ]; then
+  echo "${YEL}mindforge: scrub BYPASSED by MINDFORGE_SCRUB=off${OFF}" >&2
+  exit 0
+fi
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+hits=0
+report() {  # file, line, why, excerpt
+  hits=$((hits+1))
+  printf '%s%s:%s%s  %s\n' "$RED" "$1" "$2" "$OFF" "$3" >&2
+  printf '   %s%s%s\n' "$DIM" "$4" "$OFF" >&2
+}
+
+# --- layer 1: shapes, never values -----------------------------------------
+declare -a PAT_RE=(
+  '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+  '\b(10|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}\b'
+  '\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}\b'
+  'BEGIN (OPENSSH|RSA|PGP) PRIVATE KEY'
+  '\b(gh[pousr]_[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,})'
+  '/home/(?!user\b)[a-z][a-z0-9_-]*/'
+  '\bssh-(rsa|ed25519) AAAA'
+)
+declare -a PAT_WHY=(
+  'looks like an email address'
+  'private IPv4 address'
+  'Tailscale/CGNAT address'
+  'private key material'
+  'API or access token'
+  'absolute home path of a real user'
+  'public key material'
+)
+
+# --- layer 2: literal terms from the local wordlist -------------------------
+terms=0
+if [ -r "$WORDLIST" ]; then
+  terms=$(grep -cvE '^\s*(#|$)' "$WORDLIST" || true)
+fi
+
+for f in $staged; do
+  [ -f "$f" ] || continue
+  case "$f" in .githooks/pre-commit) continue ;; esac   # this file names the shapes
+  added=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -v '^+++' | sed 's/^+//')
+  [ -z "$added" ] && continue
+
+  for i in "${!PAT_RE[@]}"; do
+    while IFS= read -r m; do
+      [ -z "$m" ] && continue
+      report "$f" "?" "${PAT_WHY[$i]}" "${m:0:90}"
+    done < <(printf '%s\n' "$added" | grep -Poi "${PAT_RE[$i]}" 2>/dev/null | sort -u | head -3)
+  done
+
+  if [ "$terms" -gt 0 ]; then
+    while IFS= read -r term; do
+      [ -z "$term" ] && continue
+      case "$term" in \#*) continue ;; esac
+      if printf '%s\n' "$added" | grep -qiF -- "$term"; then
+        report "$f" "?" "local wordlist term (redacted)" "matched a term from scrub.local"
+      fi
+    done < "$WORDLIST"
+  fi
+done
+
+if [ "$hits" -gt 0 ]; then
+  echo >&2
+  echo "${RED}mindforge: commit refused -- $hits finding(s).${OFF}" >&2
+  echo "mindforge: this repo is public. Nothing personal, ever." >&2
+  echo "${DIM}mindforge: wordlist $WORDLIST ($terms terms)${OFF}" >&2
+  exit 1
+fi
+
+echo "${DIM}mindforge: scrub clean ($terms local terms + ${#PAT_RE[@]} patterns)${OFF}"
+exit 0
