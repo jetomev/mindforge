@@ -24,6 +24,22 @@ B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\03
 # One malformed row must not take the whole headline down with it. v0.1.0
 # fed date(1) straight into arithmetic: a single bad field printed a raw
 # shell error where the briefing should be. Unknown is a legal answer here.
+# F-11 · "dirty" is a fact, not information.
+# A fresh session was told `2 dirty` and nothing else, so it offered to build
+# a release that was already written and tested in the working tree. One
+# untracked stray and 89 lines of finished work looked identical. Report the
+# shape of the change: files touched, lines in/out, untracked count.
+wip_stat() {
+  local d="$1" f i del u out=""
+  f=$(git -C "$d" diff --numstat 2>/dev/null | wc -l)
+  i=$(git -C "$d" diff --numstat 2>/dev/null | awk '{a+=$1} END{print a+0}')
+  del=$(git -C "$d" diff --numstat 2>/dev/null | awk '{a+=$2} END{print a+0}')
+  u=$(git -C "$d" ls-files --others --exclude-standard 2>/dev/null | wc -l)
+  [ "${f:-0}" -gt 0 ] && out="${f}f +${i}/-${del}"
+  [ "${u:-0}" -gt 0 ] && out="${out:+$out }${u}?"
+  printf '%s' "$out"
+}
+
 days_since() {
   local e; e=$(date -d "$1" +%s 2>/dev/null) || { echo "?"; return; }
   echo $(( ( $(date +%s) - e ) / 86400 ))
@@ -68,6 +84,13 @@ headline() {
     printf ' · %sno remote cache (Stage 2)%s' "$D" "$O"
   fi
   echo
+  # F-9 · Scope stated, not remembered. A persona scoped to two projects
+  # leaked into an unrelated one twice in three weeks -- both times in
+  # sessions that HAD the rule loaded. A rule that breaks while loaded is a
+  # design problem, so print the boundary instead of trusting recall.
+  [ -r "$STATE/persona.txt" ] && \
+    printf '%sscope:%s %s\n' "$D" "$O" "$(head -1 "$STATE/persona.txt")"
+  return 0
 }
 
 full() {
@@ -80,6 +103,11 @@ full() {
     echo
   fi
 
+  if [ -r "$STATE/wip.md" ]; then
+    printf '%sIn flight%s · %s\n' "$Y" "$O" "$(cut -f1 "$STATE/wip.md")"
+    printf '  %s\n\n' "$(cut -f2 "$STATE/wip.md")"
+  fi
+
   printf '%sProjects%s\n' "$B" "$O"
   printf '  %-16s %-10s %-46s %s\n' "REPO" "LAST" "NEXT" "STATE"
   while IFS=$'\t' read -r proj next impact block; do
@@ -87,7 +115,9 @@ full() {
     local d="$PROJECTS/$proj" last="-" st="${G}clean${O}"
     if [ -d "$d/.git" ]; then
       last=$(git -C "$d" log -1 --format=%cs 2>/dev/null)
-      [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && st="${Y}dirty${O}"
+      if [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ]; then
+        st="${Y}dirty${O} ${D}$(wip_stat "$d")${O}"
+      fi
     else last="${D}no repo${O}"; fi
     # A dependency is extra information, not a replacement. v0.1.0 assigned
     # over $st here, so a dirty repo that also had a dependency printed
@@ -215,6 +245,24 @@ rot_checks() {
     case "$proj" in \#*|@*|"") continue;; esac
     [ -d "$PROJECTS/$proj" ] || printf 'R6\tqueue names %s, which is not in %s\n' "$proj" "$PROJECTS"
   done < "$STATE/queue.md"
+
+  # R7 · the index is STALE, not merely incomplete.
+  # R4 catches a memory file with no index line at all. It does not catch an
+  # index line that contradicts the file it points at -- which is the failure
+  # that actually bit: a fresh session read the one-line index, reported it as
+  # the file's contents, and stated the opposite of what the file said.
+  # Proxy: any memory file written more recently than MEMORY.md itself.
+  if [ -d "$MEM" ] && [ -r "$MEM/MEMORY.md" ]; then
+    local idx_age stale=""
+    idx_age=$(stat -c %Y "$MEM/MEMORY.md")
+    for f in "$MEM"/*.md; do
+      local b; b=$(basename "$f")
+      case "$b" in MEMORY.md|archive_index_*) continue;; esac
+      [ "$(stat -c %Y "$f")" -gt "$idx_age" ] && stale="$stale $b"
+    done
+    [ -n "$stale" ] && \
+      printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
+  fi
 }
 
 # Persist findings so "still broken" can be distinguished from "new today".
@@ -247,11 +295,60 @@ rot() {
 }
 
 # ---------------------------------------------------------------- closeout --
-MARK="$STATE/.session-start"
+# F-7 · One mark per session, not one mark per machine.
+# Claude Desktop spawns ~3 sessions per launch; with a single shared mark they
+# consume each other's and the surviving conversation is left with none. The
+# session id is exported to child processes, so a hook can identify itself
+# without parsing stdin. `wrap` runs from the human's own shell, where that
+# variable is absent -- it therefore takes the OLDEST surviving mark, which is
+# the long-running session actually being worked in, not a churn sibling.
+MARKS="$STATE/marks"
+SID="${CLAUDE_CODE_SESSION_ID:-}"
+LEGACY_MARK="$STATE/.session-start"
+
+own_mark()    { [ -n "$SID" ] && printf '%s/%s' "$MARKS" "$SID" || printf '%s/_nosession' "$MARKS"; }
+oldest_mark() { ls -1t "$MARKS"/* 2>/dev/null | tail -1; }
+
+# Marks outlive sessions that died without firing SessionEnd. Sweep anything
+# older than the cutoff so oldest_mark() cannot select a corpse.
+sweep_marks() {
+  [ -d "$MARKS" ] || return 0
+  find "$MARKS" -maxdepth 1 -type f -mmin "+$(( ${MINDFORGE_MARK_TTL_H:-12} * 60 ))" -delete 2>/dev/null || true
+}
+
+# F-8 · The visible channel that actually works on both surfaces.
+# /dev/tty needs a controlling terminal; Claude Desktop's hook runner has none.
+# DBus needs neither -- notify-send locates /run/user/$UID/bus by itself even
+# with DBUS_SESSION_BUS_ADDRESS stripped from the environment (verified on
+# Plasma 2026-08-29, all three urgency levels rendered).
+#
+# Rate-limited on purpose: Desktop spawns roughly three sessions per launch,
+# and three popups for one launch is worse than silence. Normal urgency, never
+# critical -- a briefing is information, not an alarm, and a critical popup
+# persists until dismissed. Every failure path is silent: a headless box, no
+# daemon, no notify-send at all must never break the hook.
+notify_headline() {
+  command -v notify-send >/dev/null 2>&1 || return 0
+  local stamp="$STATE/.last-notify" now prev; now=$(date +%s)
+  if [ -r "$stamp" ]; then
+    prev=$(cat "$stamp" 2>/dev/null || echo 0)
+    [ $(( now - ${prev:-0} )) -lt "${MINDFORGE_NOTIFY_GAP_S:-60}" ] && return 0
+  fi
+  printf '%s\n' "$now" > "$stamp"
+  local body
+  body=$(headline 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | tail -n +2)
+  [ -n "$body" ] || return 0
+  notify-send -a mindForge -i dialog-information -u normal \
+    "mindForge · $(date '+%a %H:%M')" "$body" >/dev/null 2>&1 || true
+}
 
 session_start() {
   # date(1) does not interpret \t -- printf must build the row.
-  printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MARK"
+  mkdir -p "$MARKS"
+  [ -r "$LEGACY_MARK" ] && mv -f "$LEGACY_MARK" "$(own_mark)" 2>/dev/null
+  sweep_marks
+  printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$(own_mark)"
+  notify_headline
   # SessionStart stdout goes into the assistant's CONTEXT, not to the screen.
   # To be visible to the human as well, write a coloured copy straight to the
   # terminal. Silently skipped when there is no tty (SDK, CI, print mode).
@@ -285,8 +382,8 @@ DIRECTIVE
 
 # Append one row. Fields: date start end focus bullets kind
 log_row() {
-  local start_d start_t
-  if [ -r "$MARK" ]; then start_d=$(cut -f1 "$MARK"); start_t=$(cut -f2 "$MARK")
+  local start_d start_t m="${4:-}"
+  if [ -n "$m" ] && [ -r "$m" ]; then start_d=$(cut -f1 "$m"); start_t=$(cut -f2 "$m")
   else start_d=$(date +%F); start_t=$(date +%H:%M); fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$start_d" "$start_t" "$(date +%H:%M)" "$1" "$2" "$3" >> "$STATE/sessions.log"
@@ -296,8 +393,11 @@ log_row() {
 wrap() {
   local focus="${1:-}" bullets="${2:-}"
   [ -z "$focus" ] && { echo "usage: mindforge wrap \"<focus>\" \"<b1>|<b2>|...\"" >&2; exit 2; }
-  log_row "$focus" "$bullets" "wrapped"
-  rm -f "$MARK"
+  local MK; MK=$(oldest_mark)
+  rm -f "$STATE/wip.md"          # wrapped work is no longer in flight
+  log_row "$focus" "$bullets" "wrapped" "$MK"
+  [ -n "$MK" ] && rm -f "$MK"
+  rm -f "$LEGACY_MARK"
   printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
   printf '%s\n' "$bullets" | tr '|' '\n' | sed 's/^/  · /'
   # Anything left unpushed is the thing a closeout exists to catch.
@@ -321,19 +421,36 @@ wrap() {
 MIN_SESSION_MIN="${MINDFORGE_MIN_SESSION_MIN:-2}"
 
 session_end() {
-  [ -r "$MARK" ] || exit 0          # already wrapped, or never started
+  local MK; MK=$(own_mark)
+  [ -r "$MK" ] || exit 0            # already wrapped, or never started
   local sd st epoch
-  sd=$(cut -f1 "$MARK"); st=$(cut -f2 "$MARK")
+  sd=$(cut -f1 "$MK"); st=$(cut -f2 "$MK")
   epoch=$(date -d "$sd $st" +%s 2>/dev/null || true)
   if [ -z "${epoch:-}" ]; then
     # Unmeasurable, so record it -- but never propagate the bad field into
     # the log, where it would break every future headline.
-    printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MARK"
-    log_row "(not wrapped)" "" "auto"
+    printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MK"
+    log_row "(not wrapped)" "" "auto" "$MK"
   elif [ $(( ( $(date +%s) - epoch ) / 60 )) -ge "$MIN_SESSION_MIN" ]; then
-    log_row "(not wrapped)" "" "auto"
+    log_row "(not wrapped)" "" "auto" "$MK"
   fi
-  rm -f "$MARK"
+  rm -f "$MK"
+}
+
+# F-12 · The mid-session sibling of wrap.
+# git can show that 89 lines changed. It cannot say "written, tested, pending
+# release" -- and that sentence is the whole difference between a fresh
+# session resuming the work and offering to redo it. wrap records what landed;
+# wip records what is still in the air. Cleared automatically by wrap, because
+# work that has been wrapped is by definition no longer in flight.
+wip() {
+  local note="${*:-}"
+  case "$note" in
+    ""|--show) [ -r "$STATE/wip.md" ] && cat "$STATE/wip.md" || echo "nothing in flight"; return 0 ;;
+    --clear)   rm -f "$STATE/wip.md"; echo "in-flight note cleared"; return 0 ;;
+  esac
+  printf '%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$note" > "$STATE/wip.md"
+  printf '%sin flight:%s %s\n' "$Y" "$O" "$note"
 }
 
 # One keystroke when drift is caught. Data beats impressions.
@@ -347,6 +464,7 @@ drift() {
 case "${1:-brief}" in
   -V|--version|version) printf 'mindforge %s\n' "$VERSION" ;;
   brief) [ "${2:-}" = "--headline" ] && headline || full ;;
+  wip)           shift; wip "$@" ;;
   rot)           rot ;;
   session-start) session_start ;;
   session-end)   session_end ;;
@@ -355,6 +473,8 @@ case "${1:-brief}" in
   *) cat >&2 <<'USAGE'
 usage:
   mindforge brief [--headline]     what is true right now
+  mindforge wip "<what is half-done>"    record work still in the air
+  mindforge wip --show | --clear
   mindforge wrap "<focus>" "<b1>|<b2>"   close the session deliberately
   mindforge drift "<what slipped>"       log a drift observation
   mindforge session-start|session-end    (called by hooks)
