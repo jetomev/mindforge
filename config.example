@@ -10,6 +10,15 @@
 # MINDFORGE_MIN_SESSION_MIN=2      # sessions shorter than this are not logged
 # MINDFORGE_MARK_TTL_H=12          # sweep session marks left by dead sessions
 # MINDFORGE_NOTIFY_GAP_S=60        # min seconds between launch notifications
+
+# --- v0.1.3 ---------------------------------------------------------------
+# MINDFORGE_ALWAYS_MAX=10          # max standing rules injected per handoff
+#
+# Optional: $MINDFORGE_STATE/always.txt -- standing orders, every line printed
+# by every brief INCLUDING the injected handoff. See always.example. It is
+# separate from rules.txt because rules.txt rotates one rule per day and
+# prints only in the full brief, so a rule that always applies reached almost
+# no sessions. Rotation suits a nudge, not a standing order.
 #
 # Optional: $MINDFORGE_STATE/persona.txt -- one line, printed by every brief.
 # See persona.example. It exists because a scoped persona leaked twice into

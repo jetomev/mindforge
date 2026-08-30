@@ -1,6 +1,10 @@
-# Copy to $MINDFORGE_STATE/rules.txt. One working rule per line.
-# `mindforge brief` surfaces one per day, rotating -- so a standing rule
-# stays visible without becoming wallpaper.
-One command per turn - intro, command, expected result, then stop.
-Verify on the machine. A claim you can check is not a claim you assert.
+# Copy to $MINDFORGE_STATE/rules.txt. One rotating nudge per line.
+# `mindforge brief` surfaces one per day, rotating -- so a reminder stays
+# visible without becoming wallpaper.
+#
+# A rule that must arrive in EVERY session does not belong here: one per day
+# means any given line is absent most days, and the rotation prints only in
+# the full brief, never in the injected handoff. Put those in always.txt --
+# see always.example.
 When a rule keeps breaking, change the design, not the reminder.
+Write forward, then revise. Not both at once.

@@ -1,0 +1,19 @@
+# Copy to $MINDFORGE_STATE/always.txt. Standing orders, one per line.
+#
+# EVERY line here is printed by EVERY brief, including the short handoff that
+# is injected at session start -- so a rule written here arrives whether or not
+# anyone runs `mindforge brief` by hand.
+#
+# This file exists because rules.txt could not do that job. It prints only in
+# the full brief, and even there it shows one rule per day, so a standing rule
+# was absent from most sessions. Rotation is right for a nudge and wrong for a
+# standing order. If a rule only matters on some days, put it in rules.txt.
+#
+# Keep the list tight and each line short: this is injected context, and ten
+# vague reminders read as wallpaper. The cap is MINDFORGE_ALWAYS_MAX (10);
+# anything past it is dropped, and the handoff says so in words.
+Write plainly. Assume the reader is not an engineer.
+Never sudo. Hand the command over; the human runs it.
+One command per turn - intro, command, expected result, then stop.
+Verify on the machine. A claim you can check is not a claim you assert.
+Report honestly: what failed, what was skipped, what is unproven.

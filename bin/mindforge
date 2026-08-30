@@ -56,6 +56,12 @@ last_session() { grep -v '^#' "$STATE/sessions.log" 2>/dev/null | grep -v '^$' |
 last_wrapped() { awk -F'\t' '$6=="wrapped"' "$STATE/sessions.log" 2>/dev/null | tail -1; }
 
 headline() {
+  # F-33 · The notification body is headline() minus its first line, and a
+  # standing rule is for the session's context, not for a launch popup that
+  # the human wrote the rules for in the first place. One flag keeps the
+  # popup a glance without keeping the rules out of the handoff.
+  local want_always=1
+  [ "${1:-}" = "--no-rules" ] && want_always=0
   printf '%s%s%s · %s\n' "$B" "$(date '+%a %Y-%m-%d')" "$O" "$(date '+%H:%M')"
   local L; L=$(last_session)
   if [ -n "$L" ]; then
@@ -84,12 +90,43 @@ headline() {
     printf ' · %sno remote cache (Stage 2)%s' "$D" "$O"
   fi
   echo
+  # F-13 · The in-flight note must reach the INJECTED briefing, not just the
+  # full brief. The hook injects headline() only, so the one line whose whole
+  # purpose is telling the next instance what to do next was the one line the
+  # next instance never saw. Truncated: this goes into context and into a
+  # notification body, and `mindforge brief` carries the full text.
+  if [ -r "$STATE/wip.md" ]; then
+    local w ts; ts=$(cut -f1 "$STATE/wip.md"); w=$(cut -f2 "$STATE/wip.md")
+    # F-16 · The cap was 200 chars and the cut was silent. On 2026-08-30 a
+    # 543-char note delivered 200, and the 343 characters dropped carried every
+    # clause saying the work was NOT finished -- the parity ruling among them.
+    # A fresh instance read the surviving "fixes written, not committed" as an
+    # invitation and proposed committing and tagging, the one action the note
+    # existed to forbid. Silent truncation does not lose detail here, it
+    # INVERTS the instruction. So: a far larger budget, and a note that is cut
+    # says so in words, where the reader cannot mistake it for the whole note.
+    # F-27 · Stamp it. Undated and sitting directly under "last session:
+    # yesterday", the note gets read as yesterday's -- which is what happened.
+    if [ ${#w} -gt 900 ]; then
+      w="${w:0:900} [TRUNCATED at 900 of ${#w} chars -- run \`mindforge brief\` for the rest]"
+    fi
+    printf '%sin flight%s (%s): %s\n' "$Y" "$O" "$ts" "$w"
+  fi
   # F-9 · Scope stated, not remembered. A persona scoped to two projects
   # leaked into an unrelated one twice in three weeks -- both times in
   # sessions that HAD the rule loaded. A rule that breaks while loaded is a
   # design problem, so print the boundary instead of trusting recall.
-  [ -r "$STATE/persona.txt" ] && \
-    printf '%sscope:%s %s\n' "$D" "$O" "$(head -1 "$STATE/persona.txt")"
+  # F-18 · Readable is not the same as meaningful. head -1 took whatever the
+  # first line was, so an empty file printed a bare "scope:" with no scope,
+  # and persona.example copied verbatim -- which its own first line tells you
+  # to do -- announced "scope: # Copy to $MINDFORGE_STATE/persona.txt".
+  # The line whose whole job is stating the boundary stated a comment. Skip
+  # comments and blanks, and print nothing rather than something empty.
+  if [ -r "$STATE/persona.txt" ]; then
+    local sc; sc=$(grep -vE '^[[:space:]]*(#|$)' "$STATE/persona.txt" 2>/dev/null | head -1)
+    [ -n "$sc" ] && printf '%sscope:%s %s\n' "$D" "$O" "$sc"
+  fi
+  [ $want_always -eq 1 ] && always_rules
   return 0
 }
 
@@ -118,7 +155,14 @@ full() {
       if [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ]; then
         st="${Y}dirty${O} ${D}$(wip_stat "$d")${O}"
       fi
-    else last="${D}no repo${O}"; fi
+    # F-19 · st defaults to clean above, and this branch used to set only
+    # last -- so a project named in the queue but absent from disk was
+    # reported as clean, in green. Absent is not clean; it is unknown.
+    # F-32 · printf field widths count BYTES, not visible characters, so a cell
+    # carrying colour codes eats its own padding -- ${D}no repo${O} is 15 bytes
+    # for 7 visible, the %-10s below adds nothing, and every column to the right
+    # shifts left by three. Pad inside the colour so the field sees 10 visible.
+    else last="${D}$(printf '%-10s' 'no repo')${O}"; st="${R}absent${O}"; fi
     # A dependency is extra information, not a replacement. v0.1.0 assigned
     # over $st here, so a dirty repo that also had a dependency printed
     # "waits" and its dirt never surfaced anywhere in the table.
@@ -172,6 +216,36 @@ rule_of_the_day() {
   mapfile -t rules < <(grep -vE '^[[:space:]]*(#|$)' "$f")
   [ "${#rules[@]}" -eq 0 ] && return 0
   echo "${rules[$(( $(date +%j) % ${#rules[@]} ))]}"
+}
+
+# F-33 · A standing rule must arrive without anyone having to ask for it.
+# rules.txt could not do that job twice over: it prints only in the FULL
+# brief, which the injected handoff does not include, and even there it shows
+# ONE rule per day -- with 7 rules on file, any given rule was absent 6 days
+# in 7. Found the way findings should be found: the human asked for the same
+# thing twice in one day, on two surfaces, and the one surface built for
+# exactly this held nothing and would have shown a different rule anyway.
+# Rotation is the right shape for a nudge and the wrong shape for a standing
+# order, so standing orders get their own file and EVERY line of it goes into
+# EVERY handoff. The cap announces itself in the handoff on purpose: dropping
+# a standing rule in silence is the precise failure this fix exists to end.
+always_rules() {
+  local f="$STATE/always.txt"
+  [ -r "$f" ] || return 0
+  local max="${MINDFORGE_ALWAYS_MAX:-10}"
+  case $max in ''|*[!0-9]*) max=10 ;; esac
+  local -a a; mapfile -t a < <(grep -vE '^[[:space:]]*(#|$)' "$f")
+  [ "${#a[@]}" -eq 0 ] && return 0
+  local i=0 r
+  for r in "${a[@]}"; do
+    [ "$i" -ge "$max" ] && break
+    printf '%salways:%s %s\n' "$D" "$O" "$r"
+    i=$((i+1))
+  done
+  [ "${#a[@]}" -gt "$max" ] && printf \
+    '%salways: [%d MORE ALWAYS-ON RULES NOT SHOWN -- trim always.txt or raise MINDFORGE_ALWAYS_MAX]%s\n' \
+    "$Y" "$(( ${#a[@]} - max ))" "$O"
+  return 0
 }
 
 
@@ -336,7 +410,7 @@ notify_headline() {
   fi
   printf '%s\n' "$now" > "$stamp"
   local body
-  body=$(headline 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | tail -n +2)
+  body=$(headline --no-rules 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | tail -n +2)
   [ -n "$body" ] || return 0
   notify-send -a mindForge -i dialog-information -u normal \
     "mindForge · $(date '+%a %H:%M')" "$body" >/dev/null 2>&1 || true
@@ -380,11 +454,28 @@ Offer `mindforge brief` for the full picture; do not paste the full brief unaske
 DIRECTIVE
 }
 
+# F-25 · A write that fails must never report success. The state directory
+# IS the continuity: a note that was not stored but reported as stored is
+# worse than no note, because the next session is told the handoff exists.
+# Found with the state dir read-only -- wip printed its success line and
+# exited 0 having written nothing.
+can_write() {
+  local f="$1"
+  if [ -e "$f" ]; then [ -w "$f" ]; else
+    local d; d=$(dirname "$f"); [ -d "$d" ] && [ -w "$d" ]
+  fi
+}
+
 # Append one row. Fields: date start end focus bullets kind
 log_row() {
   local start_d start_t m="${4:-}"
   if [ -n "$m" ] && [ -r "$m" ]; then start_d=$(cut -f1 "$m"); start_t=$(cut -f2 "$m")
   else start_d=$(date +%F); start_t=$(date +%H:%M); fi
+  if ! can_write "$STATE/sessions.log"; then
+    printf '%smindforge: cannot write %s -- row NOT logged%s\n' \
+      "$R" "$STATE/sessions.log" "$O" >&2
+    return 1
+  fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$start_d" "$start_t" "$(date +%H:%M)" "$1" "$2" "$3" >> "$STATE/sessions.log"
 }
@@ -394,8 +485,16 @@ wrap() {
   local focus="${1:-}" bullets="${2:-}"
   [ -z "$focus" ] && { echo "usage: mindforge wrap \"<focus>\" \"<b1>|<b2>|...\"" >&2; exit 2; }
   local MK; MK=$(oldest_mark)
+  # F-25 · Order matters as much as the guard. This deleted the in-flight note
+  # first and dropped the mark unconditionally, so a log write that failed
+  # destroyed the note AND the session start while still printing "wrapped" --
+  # three losses reported as a success. Log first; destroy only what the log
+  # has actually replaced.
+  if ! log_row "$focus" "$bullets" "wrapped" "$MK"; then
+    printf '%s  closeout NOT recorded -- nothing was cleared%s\n' "$R" "$O" >&2
+    return 1
+  fi
   rm -f "$STATE/wip.md"          # wrapped work is no longer in flight
-  log_row "$focus" "$bullets" "wrapped" "$MK"
   [ -n "$MK" ] && rm -f "$MK"
   rm -f "$LEGACY_MARK"
   printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
@@ -409,7 +508,13 @@ wrap() {
       printf '%s  ! %s has %s unpushed commit(s)%s\n' "$Y" "$(basename "$d")" "$a" "$O"; warned=1
     fi
   done
-  [ $warned -eq 0 ] && printf '%s  all repos pushed%s\n' "$D" "$O"
+  # F-17 · This was the last statement in the function, so when warned=1 its
+  # false branch became wrap's exit status: a successful closeout reported
+  # failure, broke && chains, and would mark a SessionEnd hook failed --
+  # exactly in the case where there IS unpushed work. The warning is output,
+  # not an error condition.
+  if [ $warned -eq 0 ]; then printf '%s  all repos pushed%s\n' "$D" "$O"; fi
+  return 0
 }
 
 # The floor. Runs from the SessionEnd hook whether or not wrap was called.
@@ -426,15 +531,20 @@ session_end() {
   local sd st epoch
   sd=$(cut -f1 "$MK"); st=$(cut -f2 "$MK")
   epoch=$(date -d "$sd $st" +%s 2>/dev/null || true)
+  # F-25 · Keep the mark when a row that was meant to be written was not.
+  # Below the floor nothing is logged and the mark is spent as designed; a
+  # FAILED write is different, and dropping the mark there loses the session
+  # start with nothing in the log to show for it.
+  local logged=1
   if [ -z "${epoch:-}" ]; then
     # Unmeasurable, so record it -- but never propagate the bad field into
     # the log, where it would break every future headline.
     printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$MK"
-    log_row "(not wrapped)" "" "auto" "$MK"
+    log_row "(not wrapped)" "" "auto" "$MK" || logged=0
   elif [ $(( ( $(date +%s) - epoch ) / 60 )) -ge "$MIN_SESSION_MIN" ]; then
-    log_row "(not wrapped)" "" "auto" "$MK"
+    log_row "(not wrapped)" "" "auto" "$MK" || logged=0
   fi
-  rm -f "$MK"
+  [ "$logged" -eq 1 ] && rm -f "$MK"
 }
 
 # F-12 · The mid-session sibling of wrap.
@@ -449,6 +559,11 @@ wip() {
     ""|--show) [ -r "$STATE/wip.md" ] && cat "$STATE/wip.md" || echo "nothing in flight"; return 0 ;;
     --clear)   rm -f "$STATE/wip.md"; echo "in-flight note cleared"; return 0 ;;
   esac
+  if ! can_write "$STATE/wip.md"; then
+    printf '%smindforge: cannot write %s -- note NOT stored%s\n' \
+      "$R" "$STATE/wip.md" "$O" >&2
+    return 1
+  fi
   printf '%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$note" > "$STATE/wip.md"
   printf '%sin flight:%s %s\n' "$Y" "$O" "$note"
 }
