@@ -6,3 +6,7 @@ scrub.local
 /private/
 *.swp
 .DS_Store
+
+# Python bytecode from testing/tally-matrix.py
+__pycache__/
+*.pyc

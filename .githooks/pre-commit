@@ -23,8 +23,20 @@ if [ "${MINDFORGE_SCRUB:-on}" = "off" ]; then
   exit 0
 fi
 
-staged=$(git diff --cached --name-only --diff-filter=ACM)
-[ -z "$staged" ] && exit 0
+# F-34 · A filename containing a space was never scanned at all.
+# `for f in $staged` word-splits on whitespace, so
+# `testing/20260830 - Test Matrix for mindForge v0-1-2.md` became seven
+# fragments, every one failed `[ -f "$f" ]`, and every one was skipped in
+# silence -- the hook then printed "scrub clean" and exited 0. The file it
+# skipped carried 26 occurrences of a name that IS in the local wordlist.
+# Worse, the L1 release convention *mandates* spaces in that filename
+# (`YYYYMMDD - Test Matrix for <project> v<X-Y-Z>.md`), so the one class of
+# document most likely to be thick with personal detail was the one class the
+# scrub could never see. A guard that fails open, silently, is worse than no
+# guard: this repo's README promises the separation is mechanical, not careful.
+# Read the list NUL-delimited; filenames are bytes, not words.
+mapfile -d '' -t STAGED < <(git diff --cached -z --name-only --diff-filter=ACM)
+[ "${#STAGED[@]}" -eq 0 ] && exit 0
 
 hits=0
 report() {  # file, line, why, excerpt
@@ -59,7 +71,7 @@ if [ -r "$WORDLIST" ]; then
   terms=$(grep -cvE '^\s*(#|$)' "$WORDLIST" || true)
 fi
 
-for f in $staged; do
+for f in "${STAGED[@]}"; do
   [ -f "$f" ] || continue
   case "$f" in .githooks/pre-commit) continue ;; esac   # this file names the shapes
   added=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -v '^+++' | sed 's/^+//')
@@ -76,7 +88,17 @@ for f in $staged; do
     while IFS= read -r term; do
       [ -z "$term" ] && continue
       case "$term" in \#*) continue ;; esac
-      if printf '%s\n' "$added" | grep -qiF -- "$term"; then
+      # F-35 · This was `printf ... | grep -qiF`, and under `set -o pipefail`
+      # that pipeline reports FAILURE on a match. grep -q exits the instant it
+      # finds one; the printf still writing behind it takes SIGPIPE and exits
+      # 141; pipefail promotes 141 to the pipeline's status; the `if` reads a
+      # hit as a miss. It only shows up once the content is big enough for the
+      # writer to still be writing -- 56 KB here, deterministic, 8 runs out of
+      # 8 -- so every small test passed and the guard failed exactly on the
+      # large documents most likely to be thick with personal detail.
+      # A here-string has no second process and no pipe, so there is nothing to
+      # signal and nothing for pipefail to promote.
+      if grep -qiF -- "$term" <<<"$added"; then
         report "$f" "?" "local wordlist term (redacted)" "matched a term from scrub.local"
       fi
     done < "$WORDLIST"
@@ -91,5 +113,5 @@ if [ "$hits" -gt 0 ]; then
   exit 1
 fi
 
-echo "${DIM}mindforge: scrub clean ($terms local terms + ${#PAT_RE[@]} patterns)${OFF}"
+echo "${DIM}mindforge: scrub clean -- ${#STAGED[@]} file(s), $terms local terms + ${#PAT_RE[@]} patterns${OFF}"
 exit 0
