@@ -4,9 +4,13 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **A test suite.** v0.1.1 shipped six fixes verified entirely by hand.
-      That worked because the surface is small; it will not keep working.
-      Shell, so `bats` or a plain harness over a sandboxed `MINDFORGE_STATE`.
+- [ ] **A test suite.** Now the most overdue item by a distance. v0.1.1 shipped
+      six fixes verified entirely by hand and v0.1.3 shipped nine more; that
+      worked because the surface is small, and it will not keep working. The
+      excuse is gone: the **115-check matrix in `testing/` is the specification**
+      that was missing, written down and run twice across both surfaces. A check
+      that can be written down can be automated. Shell, so `bats` or a plain
+      harness over a sandboxed `MINDFORGE_STATE`.
 - [ ] **Stage 2 — the remote cache.** A scheduled collector for issue counts,
       published package versions and backup health, written to JSON. The brief
       reads the cache and **prints its age**, so it can never quietly go stale.
@@ -19,6 +23,21 @@ Newest first; Future at the top.
       needs a month before it can say anything honest.
 - [ ] **Assistant portability** — the method is not Claude-specific; the
       implementation currently is. Only claim otherwise after testing another.
+
+## v0.1.3 — 2026-08-30
+
+- [x] `always.txt` — standing orders in **every** handoff, not one per day (F-33)
+- [x] In-flight notes stop truncating silently; a cut note says so (F-16)
+- [x] Failed writes never report success — `wip`, `wrap`, `session_end` (F-25)
+- [x] The in-flight note reaches the injected briefing, not just the full one (F-13)
+- [x] In-flight line carries its own timestamp, so it cannot read as yesterday's (F-27)
+- [x] `wrap` exits 0 when it warns about unpushed commits (F-17)
+- [x] `scope:` line validates content, not just readability (F-18)
+- [x] A project missing from disk reports `absent`, not `clean` (F-19)
+- [x] Table padding counts visible characters, not bytes (F-32)
+- [x] Scrub hook scans filenames containing spaces — it skipped them entirely (F-34)
+- [x] Scrub hook wordlist match survives `pipefail`; a hit no longer reads as a miss (F-35)
+- [x] 115-check test matrix published in `testing/`, with a tally that refuses to guess
 
 ## v0.1.2 — 2026-08-29
 

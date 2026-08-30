@@ -9,7 +9,7 @@ set -uo pipefail
 # ~/.config/mindforge/config is local and gitignored; see config.example.
 [ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
 
-VERSION="0.1.2"
+VERSION="0.1.3"
 STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
 PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"
 # Claude Code encodes the working directory into the memory path: / becomes -

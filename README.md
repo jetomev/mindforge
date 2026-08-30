@@ -10,11 +10,13 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.2, days old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.3, days old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. It has already caught
-> real defects (see below), including six in itself the day after it shipped,
-> but nothing here has survived a month. We publish early and say so.
+> real defects (see below), including six in itself the day after it shipped.
+> v0.1.2 was then put through a **115-check test matrix**, which found nine more
+> and is what v0.1.3 fixes. Still: one machine, one user, and nothing here has
+> survived a month. We publish early and say so.
 
 ---
 
@@ -46,6 +48,9 @@ $ mindforge brief
 
 Sat 2026-08-29 · 16:48
 last session: yesterday (19:00–23:05) — shipped v1.3.0 and v1.3.1
+in flight (2026-08-29 16:31): matrix at 114/115 — one live check left, do NOT commit
+always: Write plainly. Assume the reader is not an engineer.
+always: One command per turn - intro, command, expected result, then stop.
 
 Last time
   · Closed the 42-check test matrix, blocked 3 days on one section
@@ -70,8 +75,22 @@ One command per turn - intro, command, expected result, then stop.
 |---|---|
 | `mindforge brief` | what is true right now — local only, no network |
 | `mindforge wrap "<focus>" "<b1>\|<b2>"` | deliberate closeout; warns on unpushed work |
+| `mindforge wip "<note>"` | leave an in-flight note for the next session — `--show`, `--clear` |
 | `mindforge drift "<what slipped>"` | log a drift observation with a timestamp |
 | `mindforge rot` | the silent-failure checks, on their own |
+
+Two files hold your rules, and the difference is the whole point:
+
+| File | Shown | For |
+|---|---|---|
+| `always.txt` | **every line, every brief — including the injected handoff** | standing orders |
+| `rules.txt` | one line per day, full brief only | rotating nudges |
+
+They were one file until v0.1.3, and that file rotated. With seven rules on it,
+any given rule was missing six days in seven — and it never appeared in the
+short handoff the assistant actually receives at session start. A rule that
+arrives sometimes is not a rule. Rotation is right for a nudge and wrong for a
+standing order, so the two now live apart.
 
 Hooks wire `brief` to session start and the closeout floor to session end, so
 neither depends on anyone remembering.
@@ -85,6 +104,15 @@ git clone https://github.com/jetomev/mindforge.git ~/Programs/mindforge
 ln -s ~/Programs/mindforge/bin/mindforge ~/.local/bin/mindforge
 cp ~/Programs/mindforge/config.example ~/.config/mindforge/config   # edit paths
 cp ~/Programs/mindforge/templates/CLAUDE.md.template ~/.claude/CLAUDE.md
+```
+
+Then the optional state files, into whatever `MINDFORGE_STATE` points at
+(`~/.claude/state` by default) — each one is a plain list you edit by hand:
+
+```bash
+cp ~/Programs/mindforge/always.example  ~/.claude/state/always.txt    # standing orders
+cp ~/Programs/mindforge/rules.example   ~/.claude/state/rules.txt     # rotating nudges
+cp ~/Programs/mindforge/persona.example ~/.claude/state/persona.txt   # scope boundary
 ```
 
 Then edit `~/.claude/CLAUDE.md` — replace the `{{PLACEHOLDERS}}` with your own
@@ -131,6 +159,16 @@ Both were genuine mistakes by the person who had written the rule an hour
 earlier. That is the argument: you cannot be careful enough, often enough,
 forever.
 
+**And then the hook itself failed open — twice.** While staging v0.1.3 it
+reported `scrub clean` on a file carrying 26 occurrences of a name that was on
+its own wordlist. Two independent defects: a filename containing a space was
+never scanned at all, and under `pipefail` a match reported itself as a miss on
+any file big enough to matter. Both are fixed (F-34, F-35), both are written up
+in the changelog, and neither is edited out of this README. A guard that fails
+open and says `clean` is worse than no guard, because no guard at least leaves
+you careful — and the only reason these were caught is that the green light was
+checked instead of believed.
+
 ---
 
 ## Honest status
@@ -139,8 +177,16 @@ forever.
 whose *content* had diverged while its version matched — so every version check
 had passed it.
 
+**Caught by testing itself:** v0.1.2 was run against a written 115-check matrix
+across both surfaces. It came back 103 pass, 7 fail, 2 that the hardware cannot
+decide either way, 2 whose expectation was simply wrong, 1 not applicable. Nine
+of those became the v0.1.3 fixes. The failures are published in `testing/`
+rather than argued into passes.
+
 **Not yet demonstrated:** the drift log is empty, so drift instrumentation is a
 designed mechanism, not a proven result. One machine, one user, one assistant.
+There is still **no automated test suite** — the matrix is a specification run
+by hand, which is the most overdue item on the roadmap.
 
 **Assistant-agnostic in method, Claude Code in implementation.** The tiers, the
 laws and the rituals transfer to any assistant that reads project files. We have
