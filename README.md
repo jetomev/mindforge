@@ -10,7 +10,7 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.1, days old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.2, days old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. It has already caught
 > real defects (see below), including six in itself the day after it shipped,

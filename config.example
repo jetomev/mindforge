@@ -5,3 +5,13 @@
 # MINDFORGE_PROJECTS="$HOME/Programs"          # where your repos live
 # MINDFORGE_MEMORY="..."                       # default: derived from $HOME
 # MINDFORGE_VAULT="$HOME/Notes"                # notes vault; unset = skipped
+
+# --- v0.1.2 ---------------------------------------------------------------
+# MINDFORGE_MIN_SESSION_MIN=2      # sessions shorter than this are not logged
+# MINDFORGE_MARK_TTL_H=12          # sweep session marks left by dead sessions
+# MINDFORGE_NOTIFY_GAP_S=60        # min seconds between launch notifications
+#
+# Optional: $MINDFORGE_STATE/persona.txt -- one line, printed by every brief.
+# See persona.example. It exists because a scoped persona leaked twice into
+# projects it did not belong to, both times in sessions that HAD the rule
+# loaded. Printing the boundary beats trusting recall.

@@ -1,0 +1,12 @@
+# Copy to $MINDFORGE_STATE/persona.txt (default ~/.claude/state/persona.txt).
+# ONE line. It is printed at the end of every brief, so keep it short enough
+# to read at a glance and blunt enough to act on.
+#
+# The point is not decoration. If you use a different name, voice or persona
+# on some projects and not others, that boundary is a rule -- and a rule that
+# lives only in the assistant's memory is one it can slip without noticing.
+# State the default, name the exception, and say where the exception applies.
+#
+# Example:
+# <Your name> & <assistant name> — persona <X> is scoped to <project A> and
+# <project B> ONLY; never elsewhere, never in artifacts.

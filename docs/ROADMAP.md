@@ -4,10 +4,6 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **F-7 — the session mark is global.** One `.session-start` file is shared
-      by every concurrent assistant session, so a terminal and a Desktop window
-      open at once overwrite each other's boundaries. Needs a per-session mark
-      keyed on the session id the hook already receives.
 - [ ] **A test suite.** v0.1.1 shipped six fixes verified entirely by hand.
       That worked because the surface is small; it will not keep working.
       Shell, so `bats` or a plain harness over a sandboxed `MINDFORGE_STATE`.
@@ -23,6 +19,15 @@ Newest first; Future at the top.
       needs a month before it can say anything honest.
 - [ ] **Assistant portability** — the method is not Claude-specific; the
       implementation currently is. Only claim otherwise after testing another.
+
+## v0.1.2 — 2026-08-29
+
+- [x] Per-session marks, keyed on the session id, with an orphan sweep (F-7)
+- [x] Launch notification over DBus, rate-limited to one per launch (F-8)
+- [x] `scope:` line in every brief, from `persona.txt` (F-9)
+- [x] R7 — memory index stale relative to the files it indexes (F-10)
+- [x] Dirty repos report the shape of the change, not just the fact (F-11)
+- [x] `mindforge wip` — in-flight work survives a change of conversation (F-12)
 
 ## v0.1.1 — 2026-08-29
 
