@@ -23,6 +23,18 @@ Newest first; Future at the top.
       needs a month before it can say anything honest.
 - [ ] **Assistant portability** — the method is not Claude-specific; the
       implementation currently is. Only claim otherwise after testing another.
+- [ ] **Study [ctx](https://github.com/ctxrs/ctx) in depth.** An open-source
+      CLI that searches the session history coding agents already keep on
+      disk. It attacks the same problem from the opposite side —
+      retrieval-first where mindForge is curation-first — and its agent skill
+      independently arrives at a rule this method also holds: retrieved
+      history is evidence, not current instructions. A first skim
+      (2026-09-13) surfaced three leads worth a proper look: stamp each
+      `wrap` handoff with the session transcript path, so the raw "why" is
+      always findable; ship the method as a self-triggering skill, attacking
+      the known "L1 does not load itself" weakness structurally; publish a
+      short threat model, as ctx does even for a local-only tool. A deeper
+      read decides which of these become issues.
 
 ## v0.1.3 — 2026-08-30
 
