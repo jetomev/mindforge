@@ -1,0 +1,29 @@
+# Next open task per project · HAND-WRITTEN. Verified by rot rule R8.
+#
+# This file is NOT generated and never was. Do not add a comment claiming it
+# is maintained by something -- the original said "maintained by `mindforge
+# wrap`", wrap had never written it, and a line pointing at a closed issue sat
+# at the top of every brief for 16 days because everyone assumed it was
+# someone else's job. See mindforge#13.
+#
+# The queue cannot be generated: no tool can infer what you decided to do next.
+# So it stays hand-written and becomes CHECKABLE instead -- column 5 carries a
+# reference, and R8 holds it against the real tracker every session until it is
+# answered.
+#
+# FORMAT -- five TAB-separated columns:
+#   project      directory name under $MINDFORGE_PROJECTS (default ~/Programs)
+#   next         the one next task, in your own words
+#   impact       1-5
+#   dependency   no | blocks:<what> | waits:<what>
+#   ref          #<n>  checked against that project's GitHub tracker
+#                -     deliberate opt-out (milestone work, no single issue)
+#                BLANK IS NOT AN OPT-OUT -- R8 reports a row that forgot it.
+#
+# The repo is read from each project's own git remote, so the directory name
+# and the repository name are allowed to differ.
+#
+# @priority ranks projects; earlier = stronger, and it dominates impact.
+@priority project-a project-b
+project-a	#12 the thing you are actually doing next	5	no	#12
+project-b	v2.0.0 milestone with no single issue	3	waits:project-a#12	-
