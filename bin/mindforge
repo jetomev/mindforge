@@ -131,6 +131,7 @@ headline() {
 }
 
 full() {
+  local queue_missing=0
   headline; echo
   local W; W=$(last_wrapped)
   if [ -n "$W" ]; then
@@ -146,9 +147,19 @@ full() {
   fi
 
   printf '%sProjects%s\n' "$B" "$O"
+  # F-20 · A missing queue.md leaked a raw shell error into the middle of this
+  # table -- and exit stayed 0, so it read as a rendered brief with noise in it.
+  # This is the FIRST-RUN path: mindForge shipped no queue template, so every
+  # new user met it. Say what is missing and how to fix it, and skip the table.
+  if [ ! -r "$STATE/queue.md" ]; then
+    printf '  %sno queue.md yet -- copy templates/queue.md.template to %s/queue.md%s\n\n' \
+      "$D" "$STATE" "$O"
+    queue_missing=1
+  else
   printf '  %-16s %-10s %-46s %s\n' "REPO" "LAST" "NEXT" "STATE"
-  while IFS=$'\t' read -r proj next impact block; do
+  while IFS=$'\t' read -r proj next impact block ref; do
     case "$proj" in \#*|@*|"") continue;; esac   # @ lines are directives, not repos
+    : "${ref:-}"                                  # column 5 is R8's business
     local d="$PROJECTS/$proj" last="-" st="${G}clean${O}"
     if [ -d "$d/.git" ]; then
       last=$(git -C "$d" log -1 --format=%cs 2>/dev/null)
@@ -172,8 +183,10 @@ full() {
     esac
     printf '  %-16s %-10s %-46s %b\n' "$proj" "$last" "${next:0:46}" "$st"
   done < "$STATE/queue.md"
+  fi
   echo
 
+  if [ "${queue_missing:-0}" -eq 0 ]; then
   printf '%sRecommended first%s\n' "$B" "$O"
   awk -F'\t' '
       /^@priority/ { n=split($0,P," "); for(i=2;i<=n;i++) rank[P[i]]=n-i+1; next }
@@ -192,6 +205,7 @@ full() {
           waits:*)  printf '    %swaiting on %s%s\n' "$Y" "${b#waits:}" "$O" ;;
         esac
       done
+  fi
   echo
 
   printf '%sState%s\n' "$B" "$O"
@@ -252,7 +266,48 @@ always_rules() {
 
 # --------------------------------------------------------------------- rot --
 # Rot is silent by definition: nothing breaks, so nothing tells you.
-# Every check is local and fast. Each finding prints as "CODE<TAB>message".
+# R1-R7 are local and fast. R8 is the one exception -- it asks a real tracker,
+# because the fact it needs (is this issue still open?) does not exist on this
+# machine. It is cached and time-boxed so `brief` stays instant, and it reports
+# NOT VERIFIED rather than silence when it cannot reach the tracker.
+# Each finding prints as "CODE<TAB>message".
+
+# Derive owner/repo from the project's own git remote rather than a table.
+# A hardcoded map is one more thing that rots -- and it would have been wrong
+# on day one: the directory is `kognog`, the repository is `KognogOS`.
+queue_repo() {
+  local u; u=$(git -C "$PROJECTS/$1" remote get-url origin 2>/dev/null) || return 1
+  local r
+  case "$u" in
+    https://github.com/*) r=${u#https://github.com/} ;;
+    *github.com:*)        r=${u##*github.com:} ;;   # ssh form, any user
+    *) return 1 ;;                       # AUR and other non-GitHub remotes
+  esac
+  printf '%s' "${r%.git}"
+}
+
+# OPEN | CLOSED | UNKNOWN for one issue, cached.
+# UNKNOWN IS NEVER CACHED. A network blip must not harden into a durable
+# answer -- that is how a check starts lying quietly, which is the exact
+# failure this whole rule exists to catch.
+QUEUE_TTL="${MINDFORGE_QUEUE_TTL:-21600}"     # 6h; OPEN and CLOSED both expire
+queue_ref_state() {
+  local repo="$1" num="$2" cache="$STATE/queue-refs.cache" now hit st
+  now=$(date +%s)
+  if [ -r "$cache" ]; then
+    hit=$(awk -F'\t' -v r="$repo" -v n="$num" -v now="$now" -v ttl="$QUEUE_TTL" \
+          '$1==r && $2==n && (now-$4) < ttl { v=$3 } END { if (v) print v }' "$cache")
+    [ -n "${hit:-}" ] && { printf '%s' "$hit"; return 0; }
+  fi
+  st=$(GH_PAGER=cat timeout 8 gh issue view "$num" -R "$repo" \
+         --json state -q .state 2>/dev/null)
+  case "${st:-}" in
+    OPEN|CLOSED) printf '%s\t%s\t%s\t%s\n' "$repo" "$num" "$st" "$now" >> "$cache" ;;
+    *) st=UNKNOWN ;;
+  esac
+  printf '%s' "$st"
+}
+
 rot_checks() {
   # R1 · PKGBUILD version vs the repo's latest tag
   for pb in "$PROJECTS"/*/PKGBUILD; do
@@ -315,10 +370,57 @@ rot_checks() {
   [ "$l0" -gt 60 ] && printf 'R5\tL0 is %s lines, over the 60-line budget\n' "$l0"
 
   # R6 · queue points at a project that is not there
-  while IFS=$'\t' read -r proj _; do
-    case "$proj" in \#*|@*|"") continue;; esac
-    [ -d "$PROJECTS/$proj" ] || printf 'R6\tqueue names %s, which is not in %s\n' "$proj" "$PROJECTS"
-  done < "$STATE/queue.md"
+  # F-20 · guarded: an absent queue.md is a first-run state, not a crash site.
+  if [ -r "$STATE/queue.md" ]; then
+    while IFS=$'\t' read -r proj _; do
+      case "$proj" in \#*|@*|"") continue;; esac
+      [ -d "$PROJECTS/$proj" ] || printf 'R6\tqueue names %s, which is not in %s\n' "$proj" "$PROJECTS"
+    done < "$STATE/queue.md"
+  fi
+
+  # R8 · the queue points at work that is already finished.
+  # R6 above asks whether the PROJECT exists -- the only part of a queue line
+  # that was never going to go wrong. Nothing asked whether the TASK was still
+  # open, so nog's line sat on a closed issue for 16 days while the brief
+  # opened with it every session and the rot check said "nothing rotting".
+  #
+  # The queue cannot be generated: no tool can infer what the maintainer decided
+  # to do next. So it stays hand-written and becomes CHECKABLE instead -- column
+  # 5 carries the reference, and this rule holds it against the real tracker.
+  # Ruled 2026-09-16.
+  if [ -r "$STATE/queue.md" ]; then
+    local have_gh=1
+    command -v gh >/dev/null 2>&1 || have_gh=0
+    local checked=0
+    while IFS=$'\t' read -r proj next impact block ref; do
+      case "$proj" in \#*|@*|"") continue;; esac
+      : "${next:-}" "${impact:-}" "${block:-}"
+      # "-" is a deliberate opt-out: milestone work with no single issue.
+      # EMPTY is not -- a row that simply forgot the column must be visible,
+      # or the rule quietly stops covering whatever was added last.
+      case "${ref:-}" in
+        '-') continue ;;
+        '')  printf 'R8\tqueue row for %s has no reference in column 5 -- it cannot be checked\n' "$proj"
+             continue ;;
+      esac
+      if [ "$have_gh" -eq 0 ]; then checked=1; continue; fi
+      local repo num state
+      repo=$(queue_repo "$proj") || repo=""
+      if [ -z "$repo" ]; then
+        printf 'R8\t%s has no GitHub remote, so %s cannot be checked\n' "$proj" "$ref"
+        continue
+      fi
+      num=${ref#\#}
+      state=$(queue_ref_state "$repo" "$num")
+      case "$state" in
+        CLOSED)  printf 'R8\tqueue says %s is next on %s, but %s is CLOSED\n' "$proj" "$ref" "$ref" ;;
+        UNKNOWN) printf 'R8\tcould not reach the tracker for %s %s -- NOT verified\n' "$proj" "$ref" ;;
+      esac
+    done < "$STATE/queue.md"
+    # Said once for the whole queue, not once per row.
+    [ "$checked" -eq 1 ] && \
+      printf 'R8\tgh is not on PATH -- no queue entry was checked\n'
+  fi
 
   # R7 · the index is STALE, not merely incomplete.
   # R4 catches a memory file with no index line at all. It does not catch an
