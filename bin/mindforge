@@ -439,6 +439,25 @@ rot_checks() {
     [ -n "$stale" ] && \
       printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
   fi
+
+  # R9 · the index is OVER BUDGET, which is the quietest failure of the lot.
+  # R7 catches an index that is stale. R4 catches a memory with no index line.
+  # Neither catches an index too LARGE to load: past the harness limit
+  # MEMORY.md is truncated on the way into context, and nothing in the session
+  # says so -- the brief is then built from an unknown fraction of the index
+  # and reads exactly like a complete one. On 2026-09-21 the index had been
+  # ~2KB over for two sessions; the rot check said "nothing rotting" both
+  # mornings, and it was caught only because a loader warning happened to be
+  # visible that day. Do not rely on that warning: it is not ours.
+  # The threshold is deliberately BELOW the real cap. The job is to warn while
+  # there is still room to compact, not to confirm the damage after the fact.
+  MEMORY_MAX="${MINDFORGE_MEMORY_MAX:-20000}"
+  if [ -d "$MEM" ] && [ -r "$MEM/MEMORY.md" ]; then
+    local sz; sz=$(stat -c %s "$MEM/MEMORY.md")
+    [ "$sz" -gt "$MEMORY_MAX" ] && \
+      printf 'R9\tMEMORY.md is %s bytes, past the %s-byte budget -- part of the index may already be silently dropped; compact it\n' \
+        "$sz" "$MEMORY_MAX"
+  fi
 }
 
 # Persist findings so "still broken" can be distinguished from "new today".
