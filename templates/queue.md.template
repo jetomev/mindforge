@@ -12,7 +12,10 @@
 # answered.
 #
 # FORMAT -- five TAB-separated columns:
-#   project      directory name under $MINDFORGE_PROJECTS (default ~/Programs)
+#   project      directory under any $MINDFORGE_PROJECTS root (default ~/Programs).
+#                May carry a path, for a sub-project inside a monorepo.
+#                A directory that is not itself a repo reports the repo that
+#                tracks it, so a sub-project is not mislabelled "absent".
 #   next         the one next task, in your own words
 #   impact       1-5
 #   dependency   no | blocks:<what> | waits:<what>

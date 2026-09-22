@@ -3,6 +3,12 @@
 
 # MINDFORGE_STATE="$HOME/.claude/state"        # session log + project queue
 # MINDFORGE_PROJECTS="$HOME/Programs"          # where your repos live
+#   Colon-separated, PATH-style, for repos in more than one place:
+#   MINDFORGE_PROJECTS="$HOME/Programs:$HOME/Projects"
+#   Write it as "${MINDFORGE_PROJECTS:-...}" if you want to override it for
+#   one run from the environment -- a plain assignment here wins over the
+#   environment, which silently defeats a test you thought you had set up.
+#   Repos the queue names are scanned even when they sit under no root.
 # MINDFORGE_MEMORY="..."                       # default: derived from $HOME
 # MINDFORGE_VAULT="$HOME/Notes"                # notes vault; unset = skipped
 

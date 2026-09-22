@@ -11,7 +11,7 @@ set -uo pipefail
 
 VERSION="0.1.3"
 STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
-PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"
+PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"   # colon-separated, PATH-style
 # Claude Code encodes the working directory into the memory path: / becomes -
 MEM="${MINDFORGE_MEMORY:-$HOME/.claude/projects/$(echo "$HOME" | tr '/' '-')/memory}"
 VAULT="${MINDFORGE_VAULT:-}"
@@ -29,6 +29,62 @@ B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\03
 # a release that was already written and tested in the working tree. One
 # untracked stray and 89 lines of finished work looked identical. Report the
 # shape of the change: files touched, lines in/out, untracked count.
+# F-33 · One root was a silent blind spot, and the quiet part was the headline.
+# MINDFORGE_PROJECTS held a SINGLE directory, so every repo outside it was
+# invisible -- not merely missing from the Projects table, but uncounted by the
+# rot line, which printed "19 repos clean - nothing unpushed" while two commits
+# sat unpushed under a second root and a third repo had no remote at all.
+# A health line that cannot see a repo must not speak for it.
+# Roots are a PATH-style colon-separated list now, and -- the load-bearing half
+# -- every repo the queue names is scanned whether or not it sits under a root.
+# That is what makes the blind spot impossible rather than merely wider.
+proj_roots() { printf '%s\n' "$PROJECTS" | tr ':' '\n' | grep -v '^$'; }
+
+# Resolve a queue name to a directory. The name may carry a path, because a
+# sub-project inside a monorepo is `platform/store-two` -- so the first root
+# that HAS it wins, and no name is assumed to live under the first root.
+proj_dir() {
+  local root
+  while IFS= read -r root; do
+    [ -d "$root/$1" ] && { printf '%s' "$root/$1"; return 0; }
+  done < <(proj_roots)
+  return 1
+}
+
+# The repository GOVERNING a directory, which is not always the directory.
+# A sub-project inside a monorepo carries no .git of its own; calling it
+# "absent" in red would be false. Its work is tracked -- by the repo above it.
+governing_repo() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
+
+# Every repo worth reporting on: all repos directly under any root, PLUS the
+# governing repo of every project the queue names. Deduplicated.
+all_repos() {
+  local root d proj g
+  { while IFS= read -r root; do
+      for d in "$root"/*/.git; do [ -d "$d" ] && printf '%s\n' "${d%/.git}"; done
+    done < <(proj_roots)
+    if [ -r "$STATE/queue.md" ]; then
+      while IFS=$'\t' read -r proj _; do
+        case "$proj" in \#*|@*|"") continue;; esac
+        d=$(proj_dir "$proj") || continue
+        g=$(governing_repo "$d") && [ -n "$g" ] && printf '%s\n' "$g"
+      done < "$STATE/queue.md"
+    fi
+  } | sort -u
+}
+
+# F-32, second visit · printf field widths count BYTES; a queue line carrying
+# an em-dash is 3 bytes for 1 visible character, so every column to its right
+# slides. The first fix padded INSIDE the colour codes, which cured the cells
+# mindForge writes itself and left the cells a human writes still wrong.
+# Widen the field by the difference instead, so the width means what it says.
+pad_to() {
+  local w="$1" t="$2" vis bytes
+  vis=${#t}
+  bytes=$(LC_ALL=C printf '%s' "$t" | wc -c)
+  printf "%-$((w + bytes - vis))s" "$t"
+}
+
 wip_stat() {
   local d="$1" f i del u out=""
   f=$(git -C "$d" diff --numstat 2>/dev/null | wc -l)
@@ -72,17 +128,22 @@ headline() {
     printf '%slast session: none recorded%s\n' "$D" "$O"
   fi
   # rot line
-  local dirty=0 unpushed=0 n=0
-  for r in "$PROJECTS"/*/.git; do
-    [ -d "$r" ] || continue; local d=${r%/.git}; n=$((n+1))
+  # "clean" must mean SAFE, not merely committed. A repo with no remote is
+  # one disk failure from gone, and the old wording called it clean.
+  local dirty=0 unpushed=0 noremote=0 n=0
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue; n=$((n+1))
     [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && dirty=$((dirty+1))
     local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
     [ "${a:-0}" -gt 0 ] 2>/dev/null && unpushed=$((unpushed+1))
-  done
-  if [ $dirty -eq 0 ] && [ $unpushed -eq 0 ]; then
+    git -C "$d" remote 2>/dev/null | grep -q . || noremote=$((noremote+1))
+  done < <(all_repos)
+  if [ $dirty -eq 0 ] && [ $unpushed -eq 0 ] && [ $noremote -eq 0 ]; then
     printf '%s%d repos clean · nothing unpushed%s' "$G" "$n" "$O"
   else
-    printf '%s%d dirty · %d unpushed%s' "$Y" "$dirty" "$unpushed" "$O"
+    printf '%s%d dirty · %d unpushed' "$Y" "$dirty" "$unpushed"
+    [ $noremote -gt 0 ] && printf ' · %d with nowhere to push' "$noremote"
+    printf '%s' "$O"
   fi
   if [ -f "$REMOTE" ]; then
     printf ' · remote data %s min old' "$(( ( $(date +%s) - $(stat -c %Y "$REMOTE") ) / 60 ))"
@@ -156,15 +217,16 @@ full() {
       "$D" "$STATE" "$O"
     queue_missing=1
   else
-  printf '  %-16s %-10s %-46s %s\n' "REPO" "LAST" "NEXT" "STATE"
+  printf '  %-20s %-10s %-42s %s\n' "REPO" "LAST" "NEXT" "STATE"
   while IFS=$'\t' read -r proj next impact block ref; do
     case "$proj" in \#*|@*|"") continue;; esac   # @ lines are directives, not repos
     : "${ref:-}"                                  # column 5 is R8's business
-    local d="$PROJECTS/$proj" last="-" st="${G}clean${O}"
-    if [ -d "$d/.git" ]; then
-      last=$(git -C "$d" log -1 --format=%cs 2>/dev/null)
-      if [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ]; then
-        st="${Y}dirty${O} ${D}$(wip_stat "$d")${O}"
+    local d="" g="" last="-" st="${G}clean${O}"
+    d=$(proj_dir "$proj") && g=$(governing_repo "$d")
+    if [ -n "$g" ]; then
+      last=$(git -C "$g" log -1 --format=%cs 2>/dev/null)
+      if [ -n "$(git -C "$g" status --porcelain 2>/dev/null)" ]; then
+        st="${Y}dirty${O} ${D}$(wip_stat "$g")${O}"
       fi
     # F-19 · st defaults to clean above, and this branch used to set only
     # last -- so a project named in the queue but absent from disk was
@@ -181,7 +243,7 @@ full() {
       waits:*)  st="$st ${Y}waits${O}" ;;
       blocks:*) st="$st ${G}clears${O}" ;;
     esac
-    printf '  %-16s %-10s %-46s %b\n' "$proj" "$last" "${next:0:46}" "$st"
+    printf '  %s %-10s %s %b\n' "$(pad_to 20 "$proj")" "$last" "$(pad_to 42 "${next:0:42}")" "$st"
   done < "$STATE/queue.md"
   fi
   echo
@@ -276,7 +338,8 @@ always_rules() {
 # A hardcoded map is one more thing that rots -- and it would have been wrong
 # on day one: the directory is `kognog`, the repository is `KognogOS`.
 queue_repo() {
-  local u; u=$(git -C "$PROJECTS/$1" remote get-url origin 2>/dev/null) || return 1
+  local d; d=$(proj_dir "$1") || return 1
+  local u; u=$(git -C "$d" remote get-url origin 2>/dev/null) || return 1
   local r
   case "$u" in
     https://github.com/*) r=${u#https://github.com/} ;;
@@ -310,7 +373,9 @@ queue_ref_state() {
 
 rot_checks() {
   # R1 · PKGBUILD version vs the repo's latest tag
-  for pb in "$PROJECTS"/*/PKGBUILD; do
+  local root
+  for root in $(proj_roots); do
+  for pb in "$root"/*/PKGBUILD; do
     [ -f "$pb" ] || continue
     local d=${pb%/PKGBUILD} name; name=$(basename "$d")
     [ -d "$d/.git" ] || continue
@@ -320,13 +385,15 @@ rot_checks() {
     [ -n "$tv" ] && [ "$pv" != "$tv" ] && \
       printf 'R1\tPKGBUILD in %s says %s, latest tag is %s\n' "$name" "$pv" "$tv"
   done
+  done
 
   # R2 · repo-root PKGBUILD vs its AUR twin -- CONTENT, not version.
   # Both files said 1.3.1 on 2026-08-29 while one fetched an unsigned tarball.
-  for pb in "$PROJECTS"/*/PKGBUILD; do
+  for root in $(proj_roots); do
+  for pb in "$root"/*/PKGBUILD; do
     [ -f "$pb" ] || continue
     local d=${pb%/PKGBUILD} name; name=$(basename "$d")
-    for twin in "$PROJECTS/aur-$name/PKGBUILD" "$PROJECTS/aur-$name-remote/PKGBUILD"; do
+    for twin in "$root/aur-$name/PKGBUILD" "$root/aur-$name-remote/PKGBUILD"; do
       [ -f "$twin" ] || continue
       for key in source sha256sums validpgpkeys; do
         local a b
@@ -341,14 +408,17 @@ rot_checks() {
       break
     done
   done
+  done
 
   # R3 · uncommitted or unpushed work
-  for r in "$PROJECTS"/*/.git; do
-    [ -d "$r" ] || continue
-    local d=${r%/.git} n; n=$(basename "$d")
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    local n; n=$(basename "$d")
     local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
     [ "${a:-0}" -gt 0 ] 2>/dev/null && printf 'R3\t%s has %s unpushed commit(s)\n' "$n" "$a"
-  done
+    git -C "$d" remote 2>/dev/null | grep -q . || \
+      printf 'R3\t%s has no remote -- it exists on this machine only\n' "$n"
+  done < <(all_repos)
 
   # R4 · memory index out of step with the files it indexes
   if [ -d "$MEM" ]; then
@@ -374,7 +444,7 @@ rot_checks() {
   if [ -r "$STATE/queue.md" ]; then
     while IFS=$'\t' read -r proj _; do
       case "$proj" in \#*|@*|"") continue;; esac
-      [ -d "$PROJECTS/$proj" ] || printf 'R6\tqueue names %s, which is not in %s\n' "$proj" "$PROJECTS"
+      proj_dir "$proj" >/dev/null || printf 'R6\tqueue names %s, which is under none of %s\n' "$proj" "$PROJECTS"
     done < "$STATE/queue.md"
   fi
 
@@ -622,13 +692,16 @@ wrap() {
   printf '%s\n' "$bullets" | tr '|' '\n' | sed 's/^/  · /'
   # Anything left unpushed is the thing a closeout exists to catch.
   local warned=0
-  for r in "$PROJECTS"/*/.git; do
-    [ -d "$r" ] || continue; local d=${r%/.git}
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
     local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
     if [ "${a:-0}" -gt 0 ] 2>/dev/null; then
       printf '%s  ! %s has %s unpushed commit(s)%s\n' "$Y" "$(basename "$d")" "$a" "$O"; warned=1
     fi
-  done
+    if ! git -C "$d" remote 2>/dev/null | grep -q .; then
+      printf '%s  ! %s has no remote -- it exists on this machine only%s\n' "$Y" "$(basename "$d")" "$O"; warned=1
+    fi
+  done < <(all_repos)
   # F-17 · This was the last statement in the function, so when warned=1 its
   # false branch became wrap's exit status: a successful closeout reported
   # failure, broke && chains, and would mark a SessionEnd hook failed --
