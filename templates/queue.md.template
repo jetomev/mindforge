@@ -27,6 +27,8 @@
 # and the repository name are allowed to differ.
 #
 # @priority ranks projects; earlier = stronger, and it dominates impact.
-@priority project-a project-b
+# Comma-joined names share a tier, for two things that are both first --
+# a dated launch does not wait its turn behind a standing ranking.
+@priority project-a,project-c project-b
 project-a	#12 the thing you are actually doing next	5	no	#12
 project-b	v2.0.0 milestone with no single issue	3	waits:project-a#12	-

@@ -251,7 +251,13 @@ full() {
   if [ "${queue_missing:-0}" -eq 0 ]; then
   printf '%sRecommended first%s\n' "$B" "$O"
   awk -F'\t' '
-      /^@priority/ { n=split($0,P," "); for(i=2;i<=n;i++) rank[P[i]]=n-i+1; next }
+      # Comma-joined names share a tier: "nog,store/two kognog" ranks nog and
+      # store/two equally, above kognog. Strict order could not express two
+      # things that are both first -- and a launch date does not wait its turn.
+      /^@priority/ { n=split($0,P," ")
+                     for(i=2;i<=n;i++) { m=split(P[i],Q,",")
+                       for(j=1;j<=m;j++) rank[Q[j]]=n-i+1 }
+                     next }
       /^#/ || NF<4 { next }
       # Project priority DOMINATES (x10): nog outranks any Forge app,
       # so no amount of impact or unblocking reorders across projects.
