@@ -1,6 +1,6 @@
 # mindForge — the list
 
-**Current release: v0.1.4** (29 Sep 2026) — the release that tests itself. **Not yet released:** #27 (`wrap` measures instead of trusting) #24 (every check says yes, no or could not look) and #29 (the rot check runs at every session start).
+**Current release: v0.1.5** (29 Sep 2026) — nothing silent. Nothing unreleased.
 **Tests:** `bash testing/run-tests.sh`, 134 checks, all passing (29 Sep 2026).
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
@@ -10,11 +10,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ## Next up — in this order
 
-### 1 · Release v0.1.5
-- [x] Changelog, roadmap, README, version bump written.
-- [ ] Release notes approved; signed tag, GitHub Release, set as Latest; memory updated.
-
-### 2 · Windows support (the work laptop)
+### 1 · Windows support (the work laptop)
 - [ ] **#15** · Default memory folder is wrong on Windows.
 - [ ] **#17** · The install instructions assume Linux.
 - [ ] **#18** · Project folders outside the configured list (synced folders) are invisible.
@@ -23,7 +19,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **#21** · The PowerShell wrapper breaks quoted text, so `wrap` and `drift` record the wrong thing.
 - [ ] **#34** · The same project is counted twice on Windows because of two spellings of the drive path.
 
-### 3 · Lessons about the method (mostly writing, some design)
+### 2 · Lessons about the method (mostly writing, some design)
 - [ ] **#23** · The scoped persona leaked a third time, through the vault, which the commit check cannot reach.
 - [ ] **#25** · A warning written in a decision document does not reach the script that needs it.
 - [ ] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway.
@@ -41,4 +37,4 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] The rot checks only look at projects the queue names. A project nobody adds to the queue is never checked.
 
 ## After the work laptop pulls
-- [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.4), then `bash testing/run-tests.sh` there too. Expect 71 checks.
+- [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.5), then `bash testing/run-tests.sh` there too. Expect 134 checks, and the brief says at once whether the hooks are in place.
