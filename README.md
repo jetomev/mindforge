@@ -95,7 +95,10 @@ arrives sometimes is not a rule. Rotation is right for a nudge and wrong for a
 standing order, so the two now live apart.
 
 Hooks wire `brief` to session start and the closeout floor to session end, so
-neither depends on anyone remembering.
+neither depends on anyone remembering. **The rot check runs at every session
+start**, inside the briefing the assistant receives, because the moment
+nothing looks wrong is the moment it exists for. Its GitHub lookups run in
+parallel, so a cold start costs about a second, and offline at most one timeout.
 
 `wrap` does not take "done" on trust. It checks every repo for uncommitted
 files, unpushed commits and a missing remote, and flags a project that got

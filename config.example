@@ -36,6 +36,9 @@
 # MINDFORGE_MEMORY_MAX=20000       # R9: memory index budget in bytes -- warn
 #                                  # while there is still room to compact
 # MINDFORGE_LOG_ROWS=10            # rows shown by `mindforge log`
+# MINDFORGE_GH_TIMEOUT=8           # seconds R8 waits for GitHub; lookups run
+#                                  # in parallel, so this is also the worst
+#                                  # case added to a session start offline
 #
 # $MINDFORGE_STATE/queue.md -- one next task per project, hand-written and
 # checked by R8 against the real tracker. Start from templates/queue.md.template.

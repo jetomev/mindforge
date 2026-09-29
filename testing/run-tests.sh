@@ -35,6 +35,7 @@ new_sandbox() {
   cat > "$SB/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # gh stub: answers from $SB_GH_STATE (OPEN | CLOSED), fails otherwise.
+[ -n "${SB_GH_SLEEP:-}" ] && sleep "$SB_GH_SLEEP"
 [ -n "${SB_GH_STATE:-}" ] && { echo "$SB_GH_STATE"; exit 0; }
 exit 1
 STUB
@@ -49,7 +50,7 @@ mf() {
   env -i PATH="$SB/bin:$PATH" HOME="$SB/home" ${TZ:+TZ="$TZ"} \
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="$SB/projects" \
     MINDFORGE_MEMORY="$SB/mem" CLAUDE_CODE_SESSION_ID="$SID" \
-    SB_GH_STATE="${SB_GH_STATE:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
+    SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
     bash "$MF" "$@"
 }
 
@@ -366,6 +367,42 @@ if begin "scrub: staged then deleted"; then
   hook_repo; hr_add a.txt "server 192.$((160+8)).1.50"; rm "$SB/hr/a.txt"
   hc "" >/dev/null
   check "still scans what is staged"       bash -c '! git -C "$1" rev-parse -q --verify HEAD >/dev/null' _ "$SB/hr"
+  end
+fi
+
+# #29: the rot check runs at session start, and the git line is not it.
+gh_repo() { make_repo "$1"; g "$1" remote set-url origin "https://github.com/t/$1.git"; }
+if begin "session-start runs the rot check"; then
+  gh_repo alpha
+  printf 'alpha\tthe task\t3\t-\t#7\n' > "$SB/state/queue.md"
+  out=$(SB_GH_STATE=CLOSED mf session-start)
+  check "prints the rot check section"     grep -q '^rot check (R1-R9):' <<<"$out"
+  check "inside the briefing tags"         bash -c 'sed -n "/^<session-briefing>/,/^<\/session-briefing>/p" <<<"$1" | grep -q "^rot check"' _ "$out"
+  check "carries an R8 finding"            grep -q 'R8.*#7 is CLOSED' <<<"$out"
+  check "the directive asks for findings"  grep -q 'Name every rot-check finding' <<<"$out"
+  check "logs it to rot.log"               grep -q 'R8' "$SB/state/rot.log"
+  end
+fi
+if begin "session-start: tracker unreachable"; then
+  gh_repo alpha
+  printf 'alpha\tthe task\t3\t-\t#7\n' > "$SB/state/queue.md"
+  out=$(mf session-start)
+  check "says NOT verified, not silence"   grep -q 'R8.*could not reach the tracker.*NOT verified' <<<"$out"
+  end
+fi
+# Timed on `rot`, not session-start: the old session-start never asked the
+# tracker at all, so it was fast for the wrong reason and passed this check.
+if begin "rot: lookups in parallel"; then
+  for r in a1 a2 a3; do gh_repo $r; done
+  printf 'a1\tt\t3\t-\t#1\na2\tt\t3\t-\t#2\na3\tt\t3\t-\t#3\n' > "$SB/state/queue.md"
+  t0=$(date +%s); SB_GH_SLEEP=2 SB_GH_STATE=OPEN mf rot >/dev/null; t1=$(date +%s)
+  check "three 2s lookups take under 5s"   [ $((t1-t0)) -lt 5 ]
+  check "and all three were cached"        [ "$(grep -c OPEN "$SB/state/queue-refs.cache")" -eq 3 ]
+  end
+fi
+if begin "the git line says what it is"; then
+  make_repo alpha
+  check "labelled git:, not a rot verdict" grep -q '^git: 1 repos clean' <<<"$(mf brief --headline | sed -n 3p)"
   end
 fi
 

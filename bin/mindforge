@@ -160,7 +160,11 @@ headline() {
   else
     printf '%slast session: none recorded%s\n' "$D" "$O"
   fi
-  # rot line
+  # git line -- repo state ONLY. #29: this was commented "rot line" and
+  # printed a clean verdict in the slot where the rot check's output belongs,
+  # so every reader took it as "the rot check ran and found nothing" -- while
+  # the rot check never ran at session start at all. It is not the rot check,
+  # and its output now says what it is.
   # "clean" must mean SAFE, not merely committed. A repo with no remote is
   # one disk failure from gone, and the old wording called it clean.
   # #24 · A repo that could not be looked at is counted as such, and a
@@ -176,11 +180,11 @@ headline() {
     else unknown=$((unknown+1)); fi
   done < <(all_repos)
   if [ $n -eq 0 ]; then
-    printf '%sno repos found under %s -- nothing was checked%s' "$R" "$PROJECTS" "$O"
+    printf '%sgit: no repos found under %s -- nothing was checked%s' "$R" "$PROJECTS" "$O"
   elif [ $dirty -eq 0 ] && [ $unpushed -eq 0 ] && [ $noremote -eq 0 ] && [ $unknown -eq 0 ]; then
-    printf '%s%d repos clean · nothing unpushed%s' "$G" "$n" "$O"
+    printf '%sgit: %d repos clean · nothing unpushed%s' "$G" "$n" "$O"
   else
-    printf '%s%d dirty · %d unpushed' "$Y" "$dirty" "$unpushed"
+    printf '%sgit: %d dirty · %d unpushed' "$Y" "$dirty" "$unpushed"
     [ $noremote -gt 0 ] && printf ' · %d with nowhere to push' "$noremote"
     [ $unknown -gt 0 ] && printf ' · %d could not be checked' "$unknown"
     printf '%s' "$O"
@@ -400,21 +404,47 @@ queue_repo() {
 # answer -- that is how a check starts lying quietly, which is the exact
 # failure this whole rule exists to catch.
 QUEUE_TTL="${MINDFORGE_QUEUE_TTL:-21600}"     # 6h; OPEN and CLOSED both expire
+GH_TIMEOUT="${MINDFORGE_GH_TIMEOUT:-8}"
+ref_cached() {
+  local cache="$STATE/queue-refs.cache"
+  [ -r "$cache" ] || return 0
+  awk -F'\t' -v r="$1" -v n="$2" -v now="$(date +%s)" -v ttl="$QUEUE_TTL" \
+      '$1==r && $2==n && (now-$4) < ttl { v=$3 } END { if (v) print v }' "$cache"
+}
 queue_ref_state() {
   local repo="$1" num="$2" cache="$STATE/queue-refs.cache" now hit st
   now=$(date +%s)
-  if [ -r "$cache" ]; then
-    hit=$(awk -F'\t' -v r="$repo" -v n="$num" -v now="$now" -v ttl="$QUEUE_TTL" \
-          '$1==r && $2==n && (now-$4) < ttl { v=$3 } END { if (v) print v }' "$cache")
-    [ -n "${hit:-}" ] && { printf '%s' "$hit"; return 0; }
-  fi
-  st=$(GH_PAGER=cat timeout 8 gh issue view "$num" -R "$repo" \
+  hit=$(ref_cached "$repo" "$num")
+  [ -n "${hit:-}" ] && { printf '%s' "$hit"; return 0; }
+  # After prefetch_refs, a miss means the tracker did not answer in time.
+  # Asking again, one at a time, is what made a cold start slow.
+  [ -n "${R8_CACHE_ONLY:-}" ] && { printf 'UNKNOWN'; return 0; }
+  st=$(GH_PAGER=cat timeout "$GH_TIMEOUT" gh issue view "$num" -R "$repo" \
          --json state -q .state 2>/dev/null)
   case "${st:-}" in
     OPEN|CLOSED) printf '%s\t%s\t%s\t%s\n' "$repo" "$num" "$st" "$now" >> "$cache" ;;
     *) st=UNKNOWN ;;
   esac
   printf '%s' "$st"
+}
+
+# #29 · Ask the tracker about every uncached queue reference AT ONCE.
+# One at a time, four references cost 2.2s cold, and offline each waited out
+# its full timeout -- 32s before a session could start. In parallel the
+# worst case is one timeout. Answers land in the cache; R8 then reads only
+# the cache, and anything still missing is reported NOT verified.
+prefetch_refs() {
+  [ -r "$STATE/queue.md" ] && command -v gh >/dev/null 2>&1 || return 0
+  local proj next impact block ref repo
+  while IFS=$'\t' read -r proj next impact block ref; do
+    : "${next:-}" "${impact:-}" "${block:-}"
+    case "$proj" in \#*|@*|"") continue;; esac
+    case "${ref:-}" in ''|'-') continue;; esac
+    repo=$(queue_repo "$proj") || continue
+    [ -n "$(ref_cached "$repo" "${ref#\#}")" ] && continue
+    queue_ref_state "$repo" "${ref#\#}" >/dev/null &
+  done < <(queue_lines)
+  wait
 }
 
 rot_checks() {
@@ -608,7 +638,8 @@ rot_checks() {
 # Three sessions in a row promotes a finding to the top of the brief.
 rot() {
   local log="$STATE/rot.log" today; today=$(date +%F)
-  local found; found=$(rot_checks)
+  prefetch_refs
+  local found; found=$(R8_CACHE_ONLY=1 rot_checks)
   if [ -n "$found" ]; then
     printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
       # Append once per day per finding. brief runs the rot check on every
@@ -729,11 +760,18 @@ session_start() {
   # the session ignored it, re-deriving the same facts with seven tool calls.
   echo "<session-briefing>"
   headline
+  # #29 · The rot check exists for the moment nothing looks wrong, and that
+  # moment is session start. It had two callers, both typed by a human, so it
+  # ran only when someone already suspected a problem: an R7 finding was true
+  # all night and reached nobody. Now it runs here, every session.
+  echo "rot check (R1-R9):"
+  rot
   echo "</session-briefing>"
   cat <<'DIRECTIVE'
 INSTRUCTION: open your first reply with the briefing above, rendered for the
 user -- they cannot see hook output. It is already accurate; do not re-derive
-it with tool calls. Then answer what they actually asked.
+it with tool calls. Name every rot-check finding in it; "nothing rotting" is
+the only line you may summarise. Then answer what they actually asked.
 Offer `mindforge brief` for the full picture; do not paste the full brief unasked.
 DIRECTIVE
 }
