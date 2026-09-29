@@ -11,7 +11,8 @@ mindForge is the start-of-session briefing and end-of-session record for working
 ## Next up — in this order
 
 ### 1 · Release v0.1.5
-- [ ] Changelog, roadmap, README, version bump, memory; signed tag, GitHub Release with notes, set as Latest.
+- [x] Changelog, roadmap, README, version bump written.
+- [ ] Release notes approved; signed tag, GitHub Release, set as Latest; memory updated.
 
 ### 2 · Windows support (the work laptop)
 - [ ] **#15** · Default memory folder is wrong on Windows.

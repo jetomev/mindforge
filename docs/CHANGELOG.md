@@ -2,6 +2,46 @@
 
 Newest first.
 
+## v0.1.5 — 2026-09-29
+
+**Nothing silent.** Four fixes, one idea: a check that did not run, could not
+look, or was never asked must say so. v0.1.4 fails **47 of this release's 134
+checks**.
+
+- 🚨 **`wrap` measures instead of trusting (#27).** Twice in one session a wrap
+  was declared and was not. It now checks every repo for uncommitted files,
+  unpushed commits and a missing remote, and flags a project with commits this
+  session whose `TODO.md` did not change. It ends with **`wrap clean`** or
+  **`wrap NOT clean -- N open, M not verified`**. Open items are stored with the
+  row, and the next brief opens with them, dated. Memory and vault changes are
+  shown as facts, not counted: when to write those is the human's call.
+- 🚨 **Every check answers yes, no, or could not look (#24).** An audit of every
+  check found ten that reported "fine" when they could not measure: no upstream
+  read as "nothing unpushed", an unreadable repo as clean, zero repos as a green
+  "0 repos clean", a missing memory folder skipped three rules and said "nothing
+  rotting", a missing `CLAUDE.md` passed its line budget. All ten now say what
+  they could not check.
+- 🔓 **The scrub hook proves its tool before trusting its silence (#24).** On a
+  grep without PCRE, every pattern silently found nothing and the hook said
+  `scrub clean` — proven, it let a private address through. It now tests the
+  tool on a must-match and a must-not-match sample and refuses the commit if
+  they come out the same. No wordlist is `scrub PARTIAL`, not clean. A file
+  staged and then deleted from the folder is scanned; it used to be skipped.
+  The new hook refused its own first commit.
+- 🚨 **The rot check runs at every session start (#29).** It had only ever run
+  when a human typed `brief` or `rot`, so a finding could be true all night and
+  reach no one. Meanwhile the git count was labelled "rot line" and printed a
+  clean verdict in the check's place; it now reads `git: …`. GitHub lookups run
+  in parallel: session start costs about a second cold, and offline at most one
+  timeout (`MINDFORGE_GH_TIMEOUT`, 8s) instead of one per reference. Its first
+  real run reported a true finding.
+- **R10 — the session hooks (#16).** Missing hooks, or `disableAllHooks`, are
+  said on the brief's second line and in the rot check. A Windows install had
+  run three days without them.
+
+Tests: 134 checks, 134 pass (was 71). Warnings: no shell linter installed; not
+counted. `bash -n` is clean.
+
 ## v0.1.4 — 2026-09-29
 
 **The release that tests itself.** A month of daily use on two machines, one of

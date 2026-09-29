@@ -10,13 +10,14 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.4, one month old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.5, one month old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
-> nine defects of its own; two are fixed, seven are open and listed in the
-> issues. It has an **automated test suite** now (71 checks), after four releases
-> verified by hand. Still: one user, and we publish early and say so.
+> nine defects of its own; three are fixed, six are open and listed in the
+> issues. Its **automated test suite** has 134 checks. Every check it makes
+> answers yes, no, or *could not look* — never two answers where three are
+> true. Still: one user, and we publish early and say so.
 
 ---
 
@@ -233,11 +234,11 @@ rather than argued into passes.
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 71 checks)
-covers the closeout path — `wrap`, `session-end`, `log`, `drift`, the queue — and
-refuses to report green when nothing ran. It does not yet cover most of the
-brief and the rot rules; the 115-check matrix remains the specification for
-those, still run by hand.
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 134 checks)
+covers the closeout, the queue, session start, the headline, the scrub hook,
+and the "could not look" path of R3–R6 and R10 — and refuses to report green
+when nothing ran. R1, R2 and much of the full brief are still checked by hand
+against the 115-check matrix.
 
 **Assistant-agnostic in method, Claude Code in implementation.** The tiers, the
 laws and the rituals transfer to any assistant that reads project files. We have

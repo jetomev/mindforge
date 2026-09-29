@@ -4,12 +4,12 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **Extend the test suite to the brief and the rot rules.** v0.1.4 ships
-      `testing/run-tests.sh` (71 checks) for the closeout path and the queue.
-      Most of the brief and R1–R9 are still verified by hand against the
-      115-check matrix; each of those checks can be moved into the suite.
-- [ ] **Windows as a supported platform.** Seven open findings from a month on
-      a Windows laptop (#15–#21) plus #34: install, paths, hooks under auto
+- [ ] **Extend the test suite to R1, R2 and the full brief.** 134 checks cover
+      the closeout, the queue, session start, the headline, the scrub hook and
+      the could-not-look paths. R1, R2 and most of the full brief are still
+      verified by hand against the 115-check matrix.
+- [ ] **Windows as a supported platform.** Six open findings from a month on
+      a Windows laptop (#15, #17–#21) plus #34: install, paths, hooks under auto
       mode, notifications, the PowerShell wrapper.
 - [ ] **Stage 2 — the remote cache.** A scheduled collector for issue counts,
       published package versions and backup health, written to JSON. The brief
@@ -35,6 +35,14 @@ Newest first; Future at the top.
       the known "L1 does not load itself" weakness structurally; publish a
       short threat model, as ctx does even for a local-only tool. A deeper
       read decides which of these become issues.
+
+## v0.1.5 — 2026-09-29
+
+- [x] `wrap` measures and says clean or NOT clean; open items carry into the next brief (#27)
+- [x] Every check answers yes, no, or could not look — ten places fixed (#24)
+- [x] Scrub hook proves its grep works; `scrub PARTIAL` without a wordlist (#24)
+- [x] Rot check runs at every session start, lookups in parallel (#29)
+- [x] R10 — missing or disabled session hooks (#16)
 
 ## v0.1.4 — 2026-09-29
 
