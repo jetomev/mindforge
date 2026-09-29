@@ -10,10 +10,10 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ## Next up — in this order
 
-### 1 · Release v0.1.4
-- [ ] Changelog entries for everything since v0.1.3: R8 (queue checked against GitHub, #13), the missing-queue first run (#14), R9 (memory index too big to load), every project folder scanned (#33), projects sharing a priority tier, the test script (#35), the `wrap` fixes (#22), and Windows line endings in the queue file (#36).
-- [ ] Version bump in every place it appears, README checked top to bottom, test count reported.
-- [ ] Signed tag, GitHub Release with full notes, set as Latest.
+### 1 · Release v0.1.4 — in progress (29 Sep 2026)
+- [x] Changelog, roadmap, README and config.example written; version bumped to 0.1.4.
+- [ ] Release notes approved, then signed tag, GitHub Release with full notes, set as Latest.
+- [ ] About and topics checked on GitHub.
 
 ### 2 · Records that say something false, or failures that stay quiet
 - [ ] **#27** · `wrap` says a session is finished without checking that it is — two false wraps in one session.

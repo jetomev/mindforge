@@ -30,3 +30,13 @@
 # See persona.example. It exists because a scoped persona leaked twice into
 # projects it did not belong to, both times in sessions that HAD the rule
 # loaded. Printing the boundary beats trusting recall.
+
+# --- v0.1.4 ---------------------------------------------------------------
+# MINDFORGE_QUEUE_TTL=21600        # seconds R8 trusts a tracker answer (6h)
+# MINDFORGE_MEMORY_MAX=20000       # R9: memory index budget in bytes -- warn
+#                                  # while there is still room to compact
+# MINDFORGE_LOG_ROWS=10            # rows shown by `mindforge log`
+#
+# $MINDFORGE_STATE/queue.md -- one next task per project, hand-written and
+# checked by R8 against the real tracker. Start from templates/queue.md.template.
+# A file saved with Windows line endings is read the same as any other.

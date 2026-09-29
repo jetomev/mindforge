@@ -2,6 +2,92 @@
 
 Newest first.
 
+## v0.1.4 — 2026-09-29
+
+**The release that tests itself.** A month of daily use on two machines, one of
+them Windows, found the queue lying, a health check blind to part of the disk,
+and a closeout that could be destroyed by asking it for help. Every fix below
+was found by using the tool. For the first time, **the fixes ship with automated
+tests** — 71 checks, all passing, and each new check was also run against the
+previous version to prove it fails there.
+
+### The queue — hand-written, and now checked
+
+- 🚨 **R8 · the queue is held against the real tracker (#13).** The brief
+  recommended an issue for **16 days after it was closed**, while the rot check
+  said "nothing rotting" every session. The file announced itself as
+  "maintained by `mindforge wrap`"; nothing had ever written it, so every
+  reader assumed someone else kept it. The queue cannot be generated — no tool
+  knows what you decided to do next — so it stays hand-written and becomes
+  checkable: column 5 names the issue, and R8 asks GitHub whether it is still
+  open. `-` opts a row out on purpose; a **blank** column is reported, so a row
+  cannot drop out of coverage by forgetting it. Answers are cached for six hours
+  (`MINDFORGE_QUEUE_TTL`); "could not reach the tracker" is **never** cached, so
+  a network blip cannot harden into a lasting answer. R8 is the first check that
+  needs the network.
+- **A missing `queue.md` is a first-run state, not a crash (#14).** Two raw
+  shell errors landed in the middle of the brief, with exit status 0. mindForge
+  shipped no queue template, so this was the path every new user met. The reads
+  are guarded, and `templates/queue.md.template` now ships with the format.
+- **Two projects can share a priority tier.** `@priority nog,store/two kognog`
+  ranks the first two equally. A dated launch no longer has to wait its turn
+  behind a standing ranking.
+- **Windows line endings in `queue.md` (#36).** A queue saved on Windows turned
+  every `-` opt-out into "could not reach the tracker", silently cost the last
+  name on the `@priority` line its rank, and leaked a stray character into the
+  table. All five readers now go through one helper that drops it.
+
+### The health line — "clean" must mean safe
+
+- 🚨 **Every project root is scanned (#33).** The brief said "19 repos clean ·
+  nothing unpushed" while a repo outside the one configured folder held two
+  unpushed commits and another had no remote at all. `MINDFORGE_PROJECTS` is a
+  colon-separated list now, and — the half that closes the hole — **every repo
+  the queue names is scanned whether or not it sits under a root**. A repo with
+  no remote is a finding in R3, in `wrap` and in the headline
+  ("· N with nowhere to push"), and may no longer be called clean.
+- 🚨 **R9 · a memory index too big to load (new).** Past the loader's limit the
+  index is cut short on its way into the session, and nothing says so; the
+  brief is then built from an unknown part of it. Live for two sessions before
+  it was caught by chance. R9 warns at 20,000 bytes (`MINDFORGE_MEMORY_MAX`),
+  deliberately early, while there is still room to compact.
+
+### The closeout — asking for help must never run the command (#22)
+
+- 🚨 **`wrap --help` recorded a real closeout.** An assistant learning the
+  syntax ran it; mindForge logged a finished session titled "--help", deleted
+  the in-flight note and threw away the session's start time. `-h`/`--help` now
+  prints help for **every** command before anything runs. Any other leading
+  dash is refused with nothing written; a note that really starts with a dash
+  goes after `--`.
+- **A second wrap corrects the first.** It replaces the session's row and keeps
+  the real start time, where it used to add a zero-length duplicate.
+- **`wrap --previous`** closes a session that ended without a wrap, in place,
+  with its own times. The brief asks the human what that session did rather
+  than inviting a guess.
+- **`mindforge log [--drop-last]`** shows recent rows and removes the last one
+  with a timestamped backup, so repairing the log is a command, not a hand edit
+  that an assistant is rightly not allowed to make.
+
+### Tests
+
+- **`testing/run-tests.sh` — the first automated suite (#35).** Every check runs
+  against a throwaway home directory, and the real state is fingerprinted
+  before and after to prove it was not touched. It refuses to lie three ways: a
+  deliberately false check must fail or the run stops; zero checks run is not a
+  pass; a known defect is marked with its issue number, and one that starts
+  passing is reported. Written on the Windows laptop, carried home in the issue
+  as a patch, applied here byte-identical. **71 checks, 71 pass.** Against
+  v0.1.3's `bin/mindforge` the suite reports 38 failures.
+- Warnings: no shell linter is installed on the build machine, so none were
+  counted. `bash -n` is clean.
+
+### Still open
+
+Seven Windows findings (#15–#21) and #34, the silent-failure group (#16, #24,
+#27, #29) and six method lessons (#23, #25, #26, #28, #30, #31). All on the
+issue tracker.
+
 ## v0.1.3 — 2026-08-30
 
 **The handoff release.** v0.1.2 made continuity survive a change of conversation.

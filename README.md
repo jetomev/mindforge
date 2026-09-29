@@ -10,13 +10,13 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.3, days old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.4, one month old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
-> Desktop — the briefing is verified identical on both. It has already caught
-> real defects (see below), including six in itself the day after it shipped.
-> v0.1.2 was then put through a **115-check test matrix**, which found nine more
-> and is what v0.1.3 fixes. Still: one machine, one user, and nothing here has
-> survived a month. We publish early and say so.
+> Desktop — the briefing is verified identical on both. A second machine, a
+> Windows laptop running Git Bash, has used it since mid-September and found
+> nine defects of its own; two are fixed, seven are open and listed in the
+> issues. It has an **automated test suite** now (71 checks), after four releases
+> verified by hand. Still: one user, and we publish early and say so.
 
 ---
 
@@ -97,6 +97,27 @@ standing order, so the two now live apart.
 Hooks wire `brief` to session start and the closeout floor to session end, so
 neither depends on anyone remembering.
 
+A closeout can be corrected. Run `wrap` again in the same session and it
+replaces its own row, keeping the real start time. A session that ended without
+a wrap is closed later with `wrap --previous`, and the briefing asks *you* what
+it did rather than letting the assistant reconstruct it. `--help` on any command
+only prints help — it never runs the command.
+
+The rot check looks for things that have quietly gone wrong, and says so in
+every brief:
+
+| Rule | Catches |
+|---|---|
+| R1 | a packaging file's version behind the repo's latest tag |
+| R2 | a repo-root packaging file whose *content* differs from its published copy |
+| R3 | uncommitted or unpushed work, or a repo with no remote at all |
+| R4 | a memory file the index does not list |
+| R5 | the always-loaded tier over its 60-line budget |
+| R6 | the queue naming a project that is not on disk |
+| R7 | a memory index older than the files it describes |
+| R8 | the queue pointing at an issue that is already closed — checked against GitHub |
+| R9 | a memory index too big to load in full, which fails with no message at all |
+
 ---
 
 ## Install
@@ -115,6 +136,7 @@ Then the optional state files, into whatever `MINDFORGE_STATE` points at
 cp ~/Programs/mindforge/always.example  ~/.claude/state/always.txt    # standing orders
 cp ~/Programs/mindforge/rules.example   ~/.claude/state/rules.txt     # rotating nudges
 cp ~/Programs/mindforge/persona.example ~/.claude/state/persona.txt   # scope boundary
+cp ~/Programs/mindforge/templates/queue.md.template ~/.claude/state/queue.md  # next task per project
 ```
 
 Then edit `~/.claude/CLAUDE.md` — replace the `{{PLACEHOLDERS}}` with your own
@@ -185,10 +207,13 @@ decide either way, 2 whose expectation was simply wrong, 1 not applicable. Nine
 of those became the v0.1.3 fixes. The failures are published in `testing/`
 rather than argued into passes.
 
-**Not yet demonstrated:** the drift log is empty, so drift instrumentation is a
-designed mechanism, not a proven result. One machine, one user, one assistant.
-There is still **no automated test suite** — the matrix is a specification run
-by hand, which is the most overdue item on the roadmap.
+**Not yet demonstrated:** the drift log holds one note in a month, so drift
+instrumentation is a designed mechanism, not a proven result. One user, one
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 71 checks)
+covers the closeout path — `wrap`, `session-end`, `log`, `drift`, the queue — and
+refuses to report green when nothing ran. It does not yet cover most of the
+brief and the rot rules; the 115-check matrix remains the specification for
+those, still run by hand.
 
 **Assistant-agnostic in method, Claude Code in implementation.** The tiers, the
 laws and the rituals transfer to any assistant that reads project files. We have

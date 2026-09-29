@@ -4,13 +4,13 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **A test suite.** Now the most overdue item by a distance. v0.1.1 shipped
-      six fixes verified entirely by hand and v0.1.3 shipped nine more; that
-      worked because the surface is small, and it will not keep working. The
-      excuse is gone: the **115-check matrix in `testing/` is the specification**
-      that was missing, written down and run twice across both surfaces. A check
-      that can be written down can be automated. Shell, so `bats` or a plain
-      harness over a sandboxed `MINDFORGE_STATE`.
+- [ ] **Extend the test suite to the brief and the rot rules.** v0.1.4 ships
+      `testing/run-tests.sh` (71 checks) for the closeout path and the queue.
+      Most of the brief and R1–R9 are still verified by hand against the
+      115-check matrix; each of those checks can be moved into the suite.
+- [ ] **Windows as a supported platform.** Seven open findings from a month on
+      a Windows laptop (#15–#21) plus #34: install, paths, hooks under auto
+      mode, notifications, the PowerShell wrapper.
 - [ ] **Stage 2 — the remote cache.** A scheduled collector for issue counts,
       published package versions and backup health, written to JSON. The brief
       reads the cache and **prints its age**, so it can never quietly go stale.
@@ -35,6 +35,17 @@ Newest first; Future at the top.
       the known "L1 does not load itself" weakness structurally; publish a
       short threat model, as ctx does even for a local-only tool. A deeper
       read decides which of these become issues.
+
+## v0.1.4 — 2026-09-29
+
+- [x] R8 — the queue is checked against the real tracker (#13)
+- [x] A missing `queue.md` is a first-run state; the template ships (#14)
+- [x] Every project root scanned, and the queue's repos wherever they are (#33)
+- [x] R9 — memory index too large to load in full
+- [x] Projects can share a priority tier
+- [x] Automated test suite, `testing/run-tests.sh` (#35)
+- [x] `--help` never runs a command; `wrap` can be corrected, closed later, and repaired (#22)
+- [x] Windows line endings in `queue.md` read correctly (#36)
 
 ## v0.1.3 — 2026-08-30
 
