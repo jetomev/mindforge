@@ -1,6 +1,6 @@
 # mindForge — the list
 
-**Current release: v0.1.3** (30 Aug 2026). **Not yet released:** 9 changes, including fixes #13, #14, #22, #33 and #36 and the first automatic tests.
+**Current release: v0.1.4** (29 Sep 2026) — the release that tests itself. Nothing unreleased.
 **Tests:** `bash testing/run-tests.sh`, 71 checks, all passing (29 Sep 2026).
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
@@ -10,18 +10,13 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ## Next up — in this order
 
-### 1 · Release v0.1.4 — in progress (29 Sep 2026)
-- [x] Changelog, roadmap, README and config.example written; version bumped to 0.1.4.
-- [ ] Release notes approved, then signed tag, GitHub Release with full notes, set as Latest.
-- [ ] About and topics checked on GitHub.
-
-### 2 · Records that say something false, or failures that stay quiet
+### 1 · Records that say something false, or failures that stay quiet
 - [ ] **#27** · `wrap` says a session is finished without checking that it is — two false wraps in one session.
 - [ ] **#24** · A check that cannot run reports "nothing found" instead of "could not check".
 - [ ] **#29** · The briefing prints a line labelled "rot" that is not the rot check, so a real warning fired all night unseen.
 - [ ] **#16** · The briefing never says when the session hooks are missing, so the handoff quietly stops working.
 
-### 3 · Windows support (the work laptop)
+### 2 · Windows support (the work laptop)
 - [ ] **#15** · Default memory folder is wrong on Windows.
 - [ ] **#17** · The install instructions assume Linux.
 - [ ] **#18** · Project folders outside the configured list (synced folders) are invisible.
@@ -30,7 +25,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **#21** · The PowerShell wrapper breaks quoted text, so `wrap` and `drift` record the wrong thing.
 - [ ] **#34** · The same project is counted twice on Windows because of two spellings of the drive path.
 
-### 4 · Lessons about the method (mostly writing, some design)
+### 3 · Lessons about the method (mostly writing, some design)
 - [ ] **#23** · The scoped persona leaked a third time, through the vault, which the commit check cannot reach.
 - [ ] **#25** · A warning written in a decision document does not reach the script that needs it.
 - [ ] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway.
@@ -48,4 +43,4 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] The rot checks only look at projects the queue names. A project nobody adds to the queue is never checked.
 
 ## After the work laptop pulls
-- [ ] On the laptop: `git pull --rebase origin main`, then `bash testing/run-tests.sh` there too.
+- [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.4), then `bash testing/run-tests.sh` there too. Expect 71 checks.
