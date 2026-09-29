@@ -56,6 +56,14 @@ proj_dir() {
 # "absent" in red would be false. Its work is tracked -- by the repo above it.
 governing_repo() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
 
+# W-9 · queue.md is hand-written, and on Windows hand-written means CRLF.
+# Every reader split on tabs and kept the \r, so the last column of every
+# row -- the reference -- read as "-\r", and each deliberate "-" opt-out was
+# reported as "could not reach the tracker". The last name on the @priority
+# line lost its rank the same way, silently. One reader for every consumer,
+# so a line ending cannot mean one thing to one check and another to the next.
+queue_lines() { tr -d '\r' < "$STATE/queue.md"; }
+
 # Every repo worth reporting on: all repos directly under any root, PLUS the
 # governing repo of every project the queue names. Deduplicated.
 all_repos() {
@@ -68,7 +76,7 @@ all_repos() {
         case "$proj" in \#*|@*|"") continue;; esac
         d=$(proj_dir "$proj") || continue
         g=$(governing_repo "$d") && [ -n "$g" ] && printf '%s\n' "$g"
-      done < "$STATE/queue.md"
+      done < <(queue_lines)
     fi
   } | sort -u
 }
@@ -248,7 +256,7 @@ full() {
       blocks:*) st="$st ${G}clears${O}" ;;
     esac
     printf '  %s %-10s %s %b\n' "$(pad_to 20 "$proj")" "$last" "$(pad_to 42 "${next:0:42}")" "$st"
-  done < "$STATE/queue.md"
+  done < <(queue_lines)
   fi
   echo
 
@@ -268,7 +276,7 @@ full() {
       # Impact and blocks/waits order things within that.
       { w = (rank[$1] ? rank[$1] : 0) * 10 + $3;
         if ($4 ~ /^blocks:/) w += 2; if ($4 ~ /^waits:/) w -= 5;
-        print w"\t"$1"\t"$2"\t"$4 }' "$STATE/queue.md" \
+        print w"\t"$1"\t"$2"\t"$4 }' <(queue_lines) \
     | sort -rn | head -2 \
     | while IFS=$'\t' read -r i p n b; do
         printf '  %s%s%s — %s\n' "$B" "$p" "$O" "$n"
@@ -455,7 +463,7 @@ rot_checks() {
     while IFS=$'\t' read -r proj _; do
       case "$proj" in \#*|@*|"") continue;; esac
       proj_dir "$proj" >/dev/null || printf 'R6\tqueue names %s, which is under none of %s\n' "$proj" "$PROJECTS"
-    done < "$STATE/queue.md"
+    done < <(queue_lines)
   fi
 
   # R8 · the queue points at work that is already finished.
@@ -496,7 +504,7 @@ rot_checks() {
         CLOSED)  printf 'R8\tqueue says %s is next on %s, but %s is CLOSED\n' "$proj" "$ref" "$ref" ;;
         UNKNOWN) printf 'R8\tcould not reach the tracker for %s %s -- NOT verified\n' "$proj" "$ref" ;;
       esac
-    done < "$STATE/queue.md"
+    done < <(queue_lines)
     # Said once for the whole queue, not once per row.
     [ "$checked" -eq 1 ] && \
       printf 'R8\tgh is not on PATH -- no queue entry was checked\n'

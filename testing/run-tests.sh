@@ -287,6 +287,19 @@ if begin "headline"; then
   end
 fi
 
+# W-9 (#36): a queue.md saved with Windows line endings reads like any other.
+if begin "queue with CRLF"; then
+  make_repo bee; make_repo cee
+  printf '@priority bee\r\nbee\tthe ranked task\t1\t-\t-\r\ncee\tthe heavier task\t5\t-\t-\r\n' > "$SB/state/queue.md"
+  out=$(mf rot)
+  check "a '-' opt-out raises no R8 at all" bash -c '! grep -q "R8" <<<"$1"' _ "$out"
+  out=$(mf brief)
+  check "the last name on @priority keeps its rank" \
+    [ "$(grep -A1 'Recommended first' <<<"$out" | tail -1 | grep -o 'bee\|cee')" = bee ]
+  check "no carriage return reaches the brief" bash -c '! grep -q $'"'"'\r'"'"' <<<"$1"' _ "$out"
+  end
+fi
+
 if begin "rot"; then
   printf -- '- [a](a.md) — a\n' > "$SB/mem/MEMORY.md"
   echo a > "$SB/mem/a.md"; touch -d '2026-01-01' "$SB/mem/MEMORY.md"
