@@ -285,6 +285,59 @@ if begin "wrap checks: in-flight note"; then
   end
 fi
 
+# #16: missing session hooks are said out loud, in the brief and in rot.
+# hooks_json [start] [end] -- write settings.json with the named hooks
+hooks_json() {
+  local want="${*:-start end}" h=""
+  [[ " $want " == *" start "* ]] && h+='"SessionStart":[{"hooks":[{"type":"command","command":"mindforge session-start"}]}]'
+  [[ " $want " == *" end "* ]] && h+="${h:+,}"'"SessionEnd":[{"hooks":[{"type":"command","command":"mindforge session-end"}]}]'
+  printf '{ "hooks": { %s } }\n' "$h" > "$SB/home/.claude/settings.json"
+}
+if begin "hooks: both installed"; then
+  hooks_json start end
+  check "no hooks line"                    bash -c '! grep -q "^hooks:" <<<"$1"' _ "$(mf brief --headline)"
+  check "no R10"                           bash -c '! grep -q "R10" <<<"$1"' _ "$(mf rot)"
+  end
+fi
+if begin "hooks: none"; then
+  out=$(mf brief --headline); rc=$?
+  check "names both as NOT INSTALLED"      grep -q '^hooks: NOT INSTALLED: session-start, session-end' <<<"$out"
+  check "sits near the top"                [ "$(sed -n 2p <<<"$out" | cut -c1-6)" = "hooks:" ]
+  check "exits 0"                          [ "$rc" -eq 0 ]
+  check "R10 in rot"                       grep -q 'R10.*NOT INSTALLED' <<<"$(mf rot)"
+  end
+fi
+if begin "hooks: only session-start"; then
+  hooks_json start
+  check "names the missing one only"       grep -q '^hooks: NOT INSTALLED: session-end --' <<<"$(mf brief --headline)"
+  end
+fi
+if begin "hooks: in settings.local.json"; then
+  hooks_json start; printf '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"/opt/x/mindforge.cmd session-end"}]}]}}\n' > "$SB/home/.claude/settings.local.json"
+  check "local file and a wrapper count"   bash -c '! grep -q "^hooks:" <<<"$1"' _ "$(mf brief --headline)"
+  end
+fi
+if begin "hooks: mentioned but not a command"; then
+  printf '{"permissions":{"allow":["Bash(mindforge brief)"]},"note":"mindforge is our tool"}\n' > "$SB/home/.claude/settings.json"
+  check "a mention is not a hook"          grep -q 'NOT INSTALLED: session-start, session-end' <<<"$(mf brief --headline)"
+  end
+fi
+if begin "hooks: disabled"; then
+  hooks_json start end; sed -i 's/^{/{ "disableAllHooks": true,/' "$SB/home/.claude/settings.json"
+  check "disableAllHooks is reported"      grep -q '^hooks: all hooks disabled' <<<"$(mf brief --headline)"
+  end
+fi
+if begin "hooks: unreadable settings"; then
+  hooks_json start end; chmod 000 "$SB/home/.claude/settings.json"
+  if [ -r "$SB/home/.claude/settings.json" ]; then
+    check "SKIPPED: running as root, chmod 000 is still readable" true
+  else
+    check "could not check, said so"       grep -q '^hooks: could not check' <<<"$(mf brief --headline)"
+  fi
+  chmod 600 "$SB/home/.claude/settings.json"
+  end
+fi
+
 # #24: three answers, never two -- a check that could not look says so.
 if begin "headline: no upstream"; then
   make_repo alpha; g alpha checkout -q -b side
@@ -316,7 +369,7 @@ if begin "rot: could not look"; then
   end
 fi
 if begin "rot: present and fine stays quiet"; then
-  make_repo alpha; seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"
+  make_repo alpha; seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"; hooks_json
   check "nothing rotting"                  grep -q 'nothing rotting' <<<"$(mf rot)"
   end
 fi
@@ -402,7 +455,7 @@ if begin "rot: lookups in parallel"; then
 fi
 if begin "the git line says what it is"; then
   make_repo alpha
-  check "labelled git:, not a rot verdict" grep -q '^git: 1 repos clean' <<<"$(mf brief --headline | sed -n 3p)"
+  check "labelled git:, not a rot verdict" grep -q '^git: 1 repos clean' <<<"$(mf brief --headline)"
   end
 fi
 

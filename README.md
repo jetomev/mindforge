@@ -127,6 +127,7 @@ every brief:
 | R7 | a memory index older than the files it describes |
 | R8 | the queue pointing at an issue that is already closed — checked against GitHub |
 | R9 | a memory index too big to load in full, which fails with no message at all |
+| R10 | the session hooks missing or switched off — without them nothing above runs by itself |
 
 ---
 
@@ -170,6 +171,11 @@ To wire the hooks, add to `~/.claude/settings.json`:
 
 The `compact` entry re-injects your working agreement after context compaction —
 the moment standing rules are most likely to be flattened away.
+
+If either hook is missing, or `disableAllHooks` is on, `mindforge brief` says so
+on its second line and the rot check reports it as R10. Without them the
+handoff happens only when someone remembers it, which is the failure this whole
+tool exists to remove.
 
 ---
 

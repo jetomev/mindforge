@@ -1,7 +1,7 @@
 # mindForge — the list
 
 **Current release: v0.1.4** (29 Sep 2026) — the release that tests itself. **Not yet released:** #27 (`wrap` measures instead of trusting) #24 (every check says yes, no or could not look) and #29 (the rot check runs at every session start).
-**Tests:** `bash testing/run-tests.sh`, 123 checks, all passing (29 Sep 2026).
+**Tests:** `bash testing/run-tests.sh`, 134 checks, all passing (29 Sep 2026).
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -10,8 +10,8 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ## Next up — in this order
 
-### 1 · Records that say something false, or failures that stay quiet
-- [ ] **#16** · The briefing never says when the session hooks are missing, so the handoff quietly stops working.
+### 1 · Release v0.1.5
+- [ ] Changelog, roadmap, README, version bump, memory; signed tag, GitHub Release with notes, set as Latest.
 
 ### 2 · Windows support (the work laptop)
 - [ ] **#15** · Default memory folder is wrong on Windows.

@@ -110,6 +110,37 @@ repo_dirty_count() {
 repo_ahead()       { git -C "$1" rev-list --count @{u}..HEAD 2>/dev/null; }
 repo_has_remote()  { git -C "$1" remote 2>/dev/null | grep -q .; }
 
+# #16 · The hooks ARE the handoff, and nothing said when they were gone.
+# A Windows install ran three days without them: sessions opened with no
+# briefing, ended without a floor row, and the only way to find out was to
+# read settings.json by hand. A rule that works only if recalled is the thing
+# this tool exists to remove. Plain grep, no JSON parser: a command containing
+# "mindforge ... session-start" in a user settings file counts as installed
+# (the pattern allows a wrapper suffix such as mindforge.cmd, or a closing
+# quote around a full path). disableAllHooks turns every hook off at once and
+# is reported as its own state.
+# Prints what is missing, space-separated. Returns 0 all present, 1 something
+# missing or disabled, 2 a settings file exists but could not be read (#24).
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+hooks_missing() {
+  local f files=() missing=""
+  for f in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+    [ -e "$f" ] || continue
+    [ -r "$f" ] || { printf 'cannot read %s' "$f"; return 2; }
+    files+=("$f")
+  done
+  if [ ${#files[@]} -gt 0 ] && grep -qE '"disableAllHooks"[[:space:]]*:[[:space:]]*true' "${files[@]}"; then
+    printf 'all hooks disabled (disableAllHooks)'; return 1
+  fi
+  local h
+  for h in session-start session-end; do
+    [ ${#files[@]} -gt 0 ] && grep -qE "mindforge[^[:space:]]{0,6}[[:space:]]+$h" "${files[@]}" && continue
+    missing="${missing:+$missing, }$h"
+  done
+  [ -z "$missing" ] && return 0
+  printf 'NOT INSTALLED: %s' "$missing"; return 1
+}
+
 wip_stat() {
   local d="$1" f i del u out=""
   f=$(git -C "$d" diff --numstat 2>/dev/null | wc -l)
@@ -144,6 +175,11 @@ headline() {
   local want_always=1
   [ "${1:-}" = "--no-rules" ] && want_always=0
   printf '%s%s%s · %s\n' "$B" "$(date '+%a %Y-%m-%d')" "$O" "$(date '+%H:%M')"
+  # #16 · Near the top: without the hooks, nothing below arrives by itself.
+  local hk; hk=$(hooks_missing); case $? in
+    1) printf '%shooks: %s -- the briefing and the closeout floor will not run by themselves; see README, Install%s\n' "$R" "$hk" "$O" ;;
+    2) printf '%shooks: could not check -- %s%s\n' "$R" "$hk" "$O" ;;
+  esac
   local L; L=$(last_session)
   if [ -n "$L" ]; then
     local d f n; d=$(cut -f1 <<<"$L"); f=$(cut -f4 <<<"$L"); n=$(days_since "$d")
@@ -454,6 +490,13 @@ rot_checks() {
   while IFS= read -r root; do
     [ -d "$root" ] || printf 'R6\tproject root %s does not exist -- nothing under it was checked\n' "$root"
   done < <(proj_roots)
+
+  # R10 · the session hooks (#16) -- in the rot check too, so a hook removed
+  # later is caught by whatever still runs, and counted by three-strikes.
+  local hk; hk=$(hooks_missing); case $? in
+    1) printf 'R10\thooks %s -- the handoff only happens when someone remembers it\n' "$hk" ;;
+    2) printf 'R10\thooks could not be checked -- %s\n' "$hk" ;;
+  esac
 
   # R1 · PKGBUILD version vs the repo's latest tag
   for root in $(proj_roots); do
