@@ -284,6 +284,91 @@ if begin "wrap checks: in-flight note"; then
   end
 fi
 
+# #24: three answers, never two -- a check that could not look says so.
+if begin "headline: no upstream"; then
+  make_repo alpha; g alpha checkout -q -b side
+  out=$(mf brief --headline)
+  check "counted as could-not-check"       grep -q '1 could not be checked' <<<"$out"
+  check "and never called clean"           bash -c '! grep -q "repos clean" <<<"$1"' _ "$out"
+  end
+fi
+if begin "headline: unreadable repo"; then
+  make_repo alpha; mkdir -p "$SB/projects/broken/.git"
+  check "counted as could-not-check"       grep -q '1 could not be checked' <<<"$(mf brief --headline)"
+  end
+fi
+if begin "headline: no repos"; then
+  out=$(mf brief --headline)
+  check "zero repos is not green-clean"    grep -q 'no repos found under .* nothing was checked' <<<"$out"
+  end
+fi
+if begin "rot: could not look"; then
+  make_repo alpha; g alpha checkout -q -b side
+  out=$(mf rot)
+  check "R3 names a repo with no upstream" grep -q 'R3.*alpha has no upstream branch' <<<"$out"
+  check "R5 names a missing L0"            grep -q 'R5.*no L0 at' <<<"$out"
+  check "R4 names a missing MEMORY.md"     grep -q 'R4.*no readable MEMORY.md.*not checked' <<<"$out"
+  rm -rf "$SB/mem"
+  check "R4 names a missing memory folder" grep -q 'R4.*memory folder not found.*not checked' <<<"$(mf rot)"
+  rm -rf "$SB/projects"
+  check "R6 names a missing project root"  grep -q 'R6.*project root .* does not exist' <<<"$(mf rot)"
+  end
+fi
+if begin "rot: present and fine stays quiet"; then
+  make_repo alpha; seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"
+  check "nothing rotting"                  grep -q 'nothing rotting' <<<"$(mf rot)"
+  end
+fi
+
+# #24: the scrub guard proves its tool works, and a partial scan says partial.
+HOOK="${MINDFORGE_HOOK_UNDER_TEST:-$ROOT/.githooks/pre-commit}"
+hook_repo() {
+  git -c init.defaultBranch=main init -q "$SB/hr"; cp "$HOOK" "$SB/hr/.git/hooks/pre-commit"
+  chmod +x "$SB/hr/.git/hooks/pre-commit"; mkdir -p "$SB/nopcre"
+  local real; real=$(command -v grep)
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do [[ "$a" =~ ^-[A-Za-z]*P ]] && exit 2; done\nexec %s "$@"\n' "$real" > "$SB/nopcre/grep"
+  chmod +x "$SB/nopcre/grep"
+}
+# hc <extra PATH dir or ""> -- commit what is staged, print the hook's output
+hc() {
+  ( cd "$SB/hr" && env HOME="$SB/home" PATH="${1:+$1:}$PATH" MINDFORGE_SCRUB_LIST="${SB_LIST:-$SB/home/no-list}" \
+      git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm m 2>&1 )
+}
+hr_add() { printf '%s\n' "$2" > "$SB/hr/$1"; git -C "$SB/hr" add "$1"; }
+committed() { git -C "$SB/hr" rev-parse -q --verify HEAD >/dev/null; }
+if begin "scrub: grep without PCRE"; then
+  # Addresses are assembled at run time: written whole, this file would
+  # trip the very scrub it tests (it did, on the first commit).
+  hook_repo; hr_add a.txt "reach me at 10.1.$((1+1)).3"
+  out=$(hc "$SB/nopcre")
+  check "refuses the commit"               bash -c '! git -C "$1" rev-parse -q --verify HEAD >/dev/null' _ "$SB/hr"
+  check "says nothing was checked"         grep -q 'cannot run the scrub patterns' <<<"$out"
+  end
+fi
+if begin "scrub: no wordlist"; then
+  hook_repo; hr_add a.txt "hello"
+  out=$(hc "")
+  check "commits"                          committed
+  check "says PARTIAL, not clean"          grep -q 'scrub PARTIAL.*NOT checked' <<<"$out"
+  end
+fi
+if begin "scrub: wordlist present"; then
+  hook_repo; printf 'zanzibar\n' > "$SB/home/list"
+  hr_add a.txt "hello"
+  out=$(SB_LIST="$SB/home/list" hc "")
+  check "says clean with the term count"   grep -q 'scrub clean.*1 local terms' <<<"$out"
+  hr_add b.txt "visit Zanzibar"
+  SB_LIST="$SB/home/list" hc "" >/dev/null
+  check "refuses a wordlist term"          [ "$(git -C "$SB/hr" rev-list --count HEAD)" -eq 1 ]
+  end
+fi
+if begin "scrub: staged then deleted"; then
+  hook_repo; hr_add a.txt "server 192.$((160+8)).1.50"; rm "$SB/hr/a.txt"
+  hc "" >/dev/null
+  check "still scans what is staged"       bash -c '! git -C "$1" rev-parse -q --verify HEAD >/dev/null' _ "$SB/hr"
+  end
+fi
+
 # W-8d (#22): an unwrapped session can be closed later, in place.
 if begin "wrap --previous"; then
   printf '2026-09-17\t09:31\t10:10\t(not wrapped)\t\tauto\n' >> "$SB/state/sessions.log"

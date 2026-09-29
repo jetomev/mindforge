@@ -1,7 +1,7 @@
 # mindForge — the list
 
-**Current release: v0.1.4** (29 Sep 2026) — the release that tests itself. **Not yet released:** #27, `wrap` measures instead of trusting.
-**Tests:** `bash testing/run-tests.sh`, 97 checks, all passing (29 Sep 2026).
+**Current release: v0.1.4** (29 Sep 2026) — the release that tests itself. **Not yet released:** #27 (`wrap` measures instead of trusting) and #24 (every check says yes, no or could not look).
+**Tests:** `bash testing/run-tests.sh`, 114 checks, all passing (29 Sep 2026).
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -11,7 +11,6 @@ mindForge is the start-of-session briefing and end-of-session record for working
 ## Next up — in this order
 
 ### 1 · Records that say something false, or failures that stay quiet
-- [ ] **#24** · A check that cannot run reports "nothing found" instead of "could not check".
 - [ ] **#29** · The briefing prints a line labelled "rot" that is not the rot check, so a real warning fired all night unseen.
 - [ ] **#16** · The briefing never says when the session hooks are missing, so the handoff quietly stops working.
 

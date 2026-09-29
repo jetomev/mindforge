@@ -200,6 +200,14 @@ open and says `clean` is worse than no guard, because no guard at least leaves
 you careful — and the only reason these were caught is that the green light was
 checked instead of believed.
 
+So the hook now checks itself before it checks you. It first runs its search
+tool against a sample it must catch and one it must not; if the tool cannot
+tell them apart, the commit is refused, because nothing could be scanned.
+Without a local wordlist it says **`scrub PARTIAL`**, not `clean` — names and
+hostnames were not looked for. The same rule runs through every check
+mindForge makes: **yes, no, or could not look** — never two answers where three
+are true.
+
 ---
 
 ## Honest status

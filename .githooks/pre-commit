@@ -65,14 +65,31 @@ declare -a PAT_WHY=(
   'public key material'
 )
 
+# #24 · Prove the tool works before trusting its silence.
+# Every pattern above runs through `grep -P` with stderr discarded. On a grep
+# built without PCRE (BSD/macOS grep, some minimal builds) each call fails,
+# prints nothing, and nothing reads as "no match" -- the whole first layer
+# would pass every commit and still print "scrub clean". So run the one
+# PCRE-only feature this file relies on (the lookahead) against a sample that
+# must match and one that must not. If grep cannot tell them apart, the scan
+# cannot be done, and a scrub that could not look must not say clean.
+if ! grep -Pq '/home/(?!user\b)[a-z]+/' <<<'/home/alice/' 2>/dev/null \
+   || grep -Pq '/home/(?!user\b)[a-z]+/' <<<'/home/user/' 2>/dev/null; then
+  echo "${RED}mindforge: commit refused -- this grep cannot run the scrub patterns (no PCRE / grep -P).${OFF}" >&2
+  echo "mindforge: nothing was checked. Install a grep with -P, or bypass knowingly: MINDFORGE_SCRUB=off" >&2
+  exit 1
+fi
+
 # --- layer 2: literal terms from the local wordlist -------------------------
 terms=0
 if [ -r "$WORDLIST" ]; then
   terms=$(grep -cvE '^\s*(#|$)' "$WORDLIST" || true)
 fi
 
+# The content scanned is the STAGED content (git diff --cached), so a file
+# removed from the working tree after `git add` is still committed -- and was
+# skipped by a working-tree `[ -f ]` test. ACM already guarantees it is staged.
 for f in "${STAGED[@]}"; do
-  [ -f "$f" ] || continue
   case "$f" in .githooks/pre-commit) continue ;; esac   # this file names the shapes
   added=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -v '^+++' | sed 's/^+//')
   [ -z "$added" ] && continue
@@ -113,5 +130,13 @@ if [ "$hits" -gt 0 ]; then
   exit 1
 fi
 
+# #24 · With no wordlist, only the generic shapes were checked. Real names and
+# hostnames -- the terms this hook exists for -- were not looked for at all,
+# and "scrub clean -- 0 local terms" read as a pass. It is a partial scan;
+# say so. (Not refused: a fresh clone has no wordlist, by design.)
+if [ "$terms" -eq 0 ]; then
+  echo "${YEL}mindforge: scrub PARTIAL -- ${#STAGED[@]} file(s), ${#PAT_RE[@]} patterns only; no local terms at $WORDLIST, so names and hostnames were NOT checked${OFF}"
+  exit 0
+fi
 echo "${DIM}mindforge: scrub clean -- ${#STAGED[@]} file(s), $terms local terms + ${#PAT_RE[@]} patterns${OFF}"
 exit 0

@@ -93,6 +93,23 @@ pad_to() {
   printf "%-$((w + bytes - vis))s" "$t"
 }
 
+# #24 · Three answers, never two: yes, no, and COULD NOT LOOK.
+# Three times in one evening a check that could not measure reported the
+# absence of a positive as a negative -- dig with no resolver, a gate on a
+# tool that was not installed, "reachable" printed under a timeout. Here the
+# same shape lived in the repo sweep: `rev-list @{u}..HEAD || echo 0` made
+# "no upstream to compare against" read as "nothing unpushed", and a failed
+# `git status` read as "clean". These return non-zero when they could not
+# look, so every caller has to decide what to say about that.
+repo_readable()    { git -C "$1" rev-parse --git-dir >/dev/null 2>&1; }
+repo_dirty_count() {
+  local s; s=$(git -C "$1" status --porcelain 2>/dev/null) || return 1
+  if [ -z "$s" ]; then echo 0; else grep -c . <<<"$s"; fi
+  return 0
+}
+repo_ahead()       { git -C "$1" rev-list --count @{u}..HEAD 2>/dev/null; }
+repo_has_remote()  { git -C "$1" remote 2>/dev/null | grep -q .; }
+
 wip_stat() {
   local d="$1" f i del u out=""
   f=$(git -C "$d" diff --numstat 2>/dev/null | wc -l)
@@ -146,19 +163,26 @@ headline() {
   # rot line
   # "clean" must mean SAFE, not merely committed. A repo with no remote is
   # one disk failure from gone, and the old wording called it clean.
-  local dirty=0 unpushed=0 noremote=0 n=0
+  # #24 · A repo that could not be looked at is counted as such, and a
+  # headline with any of those in it may not say clean.
+  local dirty=0 unpushed=0 noremote=0 unknown=0 n=0 c a
   while IFS= read -r d; do
     [ -n "$d" ] || continue; n=$((n+1))
-    [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && dirty=$((dirty+1))
-    local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
-    [ "${a:-0}" -gt 0 ] 2>/dev/null && unpushed=$((unpushed+1))
-    git -C "$d" remote 2>/dev/null | grep -q . || noremote=$((noremote+1))
+    repo_readable "$d" || { unknown=$((unknown+1)); continue; }
+    if c=$(repo_dirty_count "$d"); then [ "$c" -gt 0 ] && dirty=$((dirty+1))
+    else unknown=$((unknown+1)); continue; fi
+    if ! repo_has_remote "$d"; then noremote=$((noremote+1))
+    elif a=$(repo_ahead "$d"); then [ "$a" -gt 0 ] && unpushed=$((unpushed+1))
+    else unknown=$((unknown+1)); fi
   done < <(all_repos)
-  if [ $dirty -eq 0 ] && [ $unpushed -eq 0 ] && [ $noremote -eq 0 ]; then
+  if [ $n -eq 0 ]; then
+    printf '%sno repos found under %s -- nothing was checked%s' "$R" "$PROJECTS" "$O"
+  elif [ $dirty -eq 0 ] && [ $unpushed -eq 0 ] && [ $noremote -eq 0 ] && [ $unknown -eq 0 ]; then
     printf '%s%d repos clean · nothing unpushed%s' "$G" "$n" "$O"
   else
     printf '%s%d dirty · %d unpushed' "$Y" "$dirty" "$unpushed"
     [ $noremote -gt 0 ] && printf ' · %d with nowhere to push' "$noremote"
+    [ $unknown -gt 0 ] && printf ' · %d could not be checked' "$unknown"
     printf '%s' "$O"
   fi
   if [ -f "$REMOTE" ]; then
@@ -237,13 +261,13 @@ full() {
   while IFS=$'\t' read -r proj next impact block ref; do
     case "$proj" in \#*|@*|"") continue;; esac   # @ lines are directives, not repos
     : "${ref:-}"                                  # column 5 is R8's business
-    local d="" g="" last="-" st="${G}clean${O}"
+    local d="" g="" c="" last="-" st="${G}clean${O}"
     d=$(proj_dir "$proj") && g=$(governing_repo "$d")
     if [ -n "$g" ]; then
-      last=$(git -C "$g" log -1 --format=%cs 2>/dev/null)
-      if [ -n "$(git -C "$g" status --porcelain 2>/dev/null)" ]; then
-        st="${Y}dirty${O} ${D}$(wip_stat "$g")${O}"
-      fi
+      last=$(git -C "$g" log -1 --format=%cs 2>/dev/null); last=${last:--}
+      # #24 · a status that could not be read is not clean.
+      if ! c=$(repo_dirty_count "$g"); then st="${R}unknown${O}"
+      elif [ "$c" -gt 0 ]; then st="${Y}dirty${O} ${D}$(wip_stat "$g")${O}"; fi
     # F-19 · st defaults to clean above, and this branch used to set only
     # last -- so a project named in the queue but absent from disk was
     # reported as clean, in green. Absent is not clean; it is unknown.
@@ -394,8 +418,14 @@ queue_ref_state() {
 }
 
 rot_checks() {
-  # R1 · PKGBUILD version vs the repo's latest tag
+  # #24 · A root that does not exist contributes zero repos, and zero repos
+  # looks exactly like zero problems.
   local root
+  while IFS= read -r root; do
+    [ -d "$root" ] || printf 'R6\tproject root %s does not exist -- nothing under it was checked\n' "$root"
+  done < <(proj_roots)
+
+  # R1 · PKGBUILD version vs the repo's latest tag
   for root in $(proj_roots); do
   for pb in "$root"/*/PKGBUILD; do
     [ -f "$pb" ] || continue
@@ -432,23 +462,38 @@ rot_checks() {
   done
   done
 
-  # R3 · uncommitted or unpushed work
+  # R3 · unpushed work, or nowhere to push it. (Uncommitted work is normal
+  # mid-session; the headline counts it, the rot check does not nag about it.)
+  # #24 · "no upstream" used to read as "0 unpushed" -- silence, where the
+  # truth was "could not count". A repo git cannot read is said out loud too.
   while IFS= read -r d; do
     [ -n "$d" ] || continue
-    local n; n=$(basename "$d")
-    local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
-    [ "${a:-0}" -gt 0 ] 2>/dev/null && printf 'R3\t%s has %s unpushed commit(s)\n' "$n" "$a"
-    git -C "$d" remote 2>/dev/null | grep -q . || \
+    local n a; n=$(basename "$d")
+    if ! repo_readable "$d"; then
+      printf 'R3\t%s cannot be read as a git repo -- not checked\n' "$n"
+    elif ! repo_has_remote "$d"; then
       printf 'R3\t%s has no remote -- it exists on this machine only\n' "$n"
+    elif a=$(repo_ahead "$d"); then
+      [ "$a" -gt 0 ] && printf 'R3\t%s has %s unpushed commit(s)\n' "$n" "$a"
+    else
+      printf 'R3\t%s has no upstream branch -- unpushed work cannot be counted\n' "$n"
+    fi
   done < <(all_repos)
 
   # R4 · memory index out of step with the files it indexes
-  if [ -d "$MEM" ]; then
+  # #24 · R4, R7 and R9 all need the folder AND its index. Without them the
+  # three used to skip in silence and the brief said "nothing rotting".
+  if [ ! -d "$MEM" ]; then
+    printf 'R4\tmemory folder not found at %s -- R4, R7 and R9 were not checked\n' "$MEM"
+  elif [ ! -r "$MEM/MEMORY.md" ]; then
+    printf 'R4\tno readable MEMORY.md in %s -- R4, R7 and R9 were not checked\n' "$MEM"
+  else
     local files idx
     # Name the orphans rather than comparing counts: an index line can carry
     # more than one link, so a count comparison over-reports.
     local orphans=""
     for f in "$MEM"/*.md; do
+      [ -e "$f" ] || continue
       local b; b=$(basename "$f")
       case "$b" in MEMORY.md|archive_index_*) continue;; esac
       grep -qF "($b)" "$MEM/MEMORY.md" 2>/dev/null || orphans="$orphans $b"
@@ -458,8 +503,14 @@ rot_checks() {
   fi
 
   # R5 · L0 over budget -- dilution looks exactly like drift
-  local l0; l0=$(grep -c '' "$HOME/.claude/CLAUDE.md" 2>/dev/null || echo 0)
-  [ "$l0" -gt 60 ] && printf 'R5\tL0 is %s lines, over the 60-line budget\n' "$l0"
+  # #24 · a missing L0 was "0 lines, under budget". It is the opposite: no
+  # working agreement is being loaded at all.
+  if [ ! -r "$HOME/.claude/CLAUDE.md" ]; then
+    printf 'R5\tno L0 at %s -- no working agreement is being loaded\n' "$HOME/.claude/CLAUDE.md"
+  else
+    local l0; l0=$(grep -c '' "$HOME/.claude/CLAUDE.md")
+    [ "$l0" -gt 60 ] && printf 'R5\tL0 is %s lines, over the 60-line budget\n' "$l0"
+  fi
 
   # R6 · queue points at a project that is not there
   # F-20 · guarded: an absent queue.md is a first-run state, not a crash site.
@@ -524,6 +575,7 @@ rot_checks() {
     local idx_age stale=""
     idx_age=$(stat -c %Y "$MEM/MEMORY.md")
     for f in "$MEM"/*.md; do
+      [ -e "$f" ] || continue
       local b; b=$(basename "$f")
       case "$b" in MEMORY.md|archive_index_*) continue;; esac
       [ "$(stat -c %Y "$f")" -gt "$idx_age" ] && stale="$stale $b"
@@ -778,13 +830,16 @@ wrap_checks() {
   local d name n=0 clean=0 dirty a c t
   while IFS= read -r d; do
     [ -n "$d" ] || continue; n=$((n+1)); name=$(basename "$d")
-    if ! git -C "$d" rev-parse --git-dir >/dev/null 2>&1; then c_unk "$name: not readable as a git repo"; continue; fi
+    if ! repo_readable "$d"; then c_unk "$name: not readable as a git repo"; continue; fi
     local before=$((N_OPEN+N_UNVER))
-    dirty=$(git -C "$d" status --porcelain 2>/dev/null | grep -c .)
-    [ "$dirty" -gt 0 ] && c_open "$name: $dirty uncommitted file(s)"
-    if ! git -C "$d" remote 2>/dev/null | grep -q .; then
+    if dirty=$(repo_dirty_count "$d"); then
+      [ "$dirty" -gt 0 ] && c_open "$name: $dirty uncommitted file(s)"
+    else
+      c_unk "$name: git status failed, so uncommitted work cannot be counted"
+    fi
+    if ! repo_has_remote "$d"; then
       c_open "$name: no remote -- it exists on this machine only"
-    elif a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null); then
+    elif a=$(repo_ahead "$d"); then
       [ "$a" -gt 0 ] && c_open "$name: $a unpushed commit(s)"
     else
       c_unk "$name: no upstream branch, so unpushed work cannot be counted"
