@@ -134,6 +134,10 @@ headline() {
     printf 'last session: %s (%s) — %s\n' "$when" "$(cut -f2 <<<"$L")–$(cut -f3 <<<"$L")" "$f"
     # W-8d · Ask the human; do not reconstruct. The earlier conversation is
     # not this one, and guessing what it did is how a log starts to lie.
+    # #27 · What the last closeout measured as unfinished, dated, so it is
+    # read as "open at that wrap", not as a claim about right now.
+    local W7; W7=$(last_wrapped | cut -sf7)
+    [ -n "$W7" ] && printf '  %s! open at the last wrap (%s): %s%s\n' "$Y" "$(last_wrapped | cut -f1)" "$W7" "$O"
     [ "$f" = "(not wrapped)" ] && \
       printf '  %s→ ask the human what that session did, then: mindforge wrap --previous "<focus>" "<b1>|<b2>"%s\n' "$D" "$O"
   else
@@ -699,16 +703,17 @@ log_unwritable() {
     "$R" "$STATE/sessions.log" "$O" >&2
 }
 
-# Append one row. Fields: date start end focus bullets kind
+# Append one row. Fields: date start end focus bullets kind [open]
 # The end time it wrote is left in LOGGED_END, so wrap can record it in the mark.
+# The 7th field is written only when there is something in it (#27).
 log_row() {
   local start_d start_t m="${4:-}"
   if [ -n "$m" ] && [ -r "$m" ]; then start_d=$(cut -f1 "$m"); start_t=$(cut -f2 "$m")
   else start_d=$(date +%F); start_t=$(date +%H:%M); fi
   can_write "$STATE/sessions.log" || { log_unwritable; return 1; }
   LOGGED_END=$(date +%H:%M)
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$start_d" "$start_t" "$LOGGED_END" "$1" "$2" "$3" >> "$STATE/sessions.log"
+  printf '%s\t%s\t%s\t%s\t%s\t%s%s\n' \
+    "$start_d" "$start_t" "$LOGGED_END" "$1" "$2" "$3" "${5:+$'\t'$5}" >> "$STATE/sessions.log"
 }
 
 # Replace the LAST row whose date, start, end and kind match with <new row>.
@@ -745,6 +750,81 @@ bad_option() {
   exit 2
 }
 
+# #27 · A wrap must measure, not feel finished.
+# Twice in one session a wrap was declared and was not: the last hour was
+# missing from the logs, a count had drifted, a forbidden string had been
+# committed. Each was invisible to "does this feel complete" and obvious to
+# "does file X say Y". The old wrap measured one thing -- unpushed commits --
+# and printed "all repos pushed", which read as nine things.
+#
+# Three levels, and the difference is the point:
+#   !  open      a fact that makes the wrap NOT clean
+#   ?  unknown   a check that could not run -- also NOT clean (#24: a check
+#                that cannot measure must never read as a pass)
+#   ·  info      measured and shown, but the human's call: memory and the
+#                vault are written when the human decides, so their silence
+#                is a fact to see, not a failure to count
+# Open and unknown items are stored in the row's 7th field, so the next
+# brief can say what the last closeout left behind.
+CHECK_OUT="" OPEN_ITEMS="" N_OPEN=0 N_UNVER=0
+c_ok()   { CHECK_OUT+="  ${G}ok${O}  $1"$'\n'; }
+c_open() { N_OPEN=$((N_OPEN+1)); OPEN_ITEMS+="${OPEN_ITEMS:+; }$1"; CHECK_OUT+="  ${Y}!${O}   $1"$'\n'; }
+c_unk()  { N_UNVER=$((N_UNVER+1)); OPEN_ITEMS+="${OPEN_ITEMS:+; }not verified: $1"; CHECK_OUT+="  ${R}?${O}   $1 -- NOT verified"$'\n'; }
+c_info() { CHECK_OUT+="  ${D}·   $1${O}"$'\n'; }
+
+# wrap_checks <start date> <start time> -- both empty when the start is unknown
+wrap_checks() {
+  local since=""; [ -n "${1:-}" ] && [ -n "${2:-}" ] && since="$1 $2"
+  local d name n=0 clean=0 dirty a c t
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue; n=$((n+1)); name=$(basename "$d")
+    if ! git -C "$d" rev-parse --git-dir >/dev/null 2>&1; then c_unk "$name: not readable as a git repo"; continue; fi
+    local before=$((N_OPEN+N_UNVER))
+    dirty=$(git -C "$d" status --porcelain 2>/dev/null | grep -c .)
+    [ "$dirty" -gt 0 ] && c_open "$name: $dirty uncommitted file(s)"
+    if ! git -C "$d" remote 2>/dev/null | grep -q .; then
+      c_open "$name: no remote -- it exists on this machine only"
+    elif a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null); then
+      [ "$a" -gt 0 ] && c_open "$name: $a unpushed commit(s)"
+    else
+      c_unk "$name: no upstream branch, so unpushed work cannot be counted"
+    fi
+    # The project's TODO.md is the handoff between sessions. Work committed
+    # this session with the list untouched is the "last thing done" gap.
+    if [ -n "$since" ] && [ -f "$d/TODO.md" ]; then
+      c=$(git -C "$d" log --since="$since" --format=%H 2>/dev/null | grep -c .)
+      t=$( { git -C "$d" log --since="$since" --format= --name-only -- TODO.md 2>/dev/null
+             git -C "$d" status --porcelain -- TODO.md 2>/dev/null; } | grep -c .)
+      [ "$c" -gt 0 ] && [ "$t" -eq 0 ] && c_open "$name: $c commit(s) this session, TODO.md not updated"
+    fi
+    [ $((N_OPEN+N_UNVER)) -eq "$before" ] && clean=$((clean+1))
+  done < <(all_repos)
+  [ "$n" -gt 0 ] && [ "$clean" -eq "$n" ] && c_ok "$n repos committed and pushed${since:+, TODO.md current where there is one}"
+  [ "$n" -gt 0 ] && [ "$clean" -lt "$n" ] && [ "$clean" -gt 0 ] && c_ok "$clean other repo(s) committed and pushed"
+  [ "$n" -eq 0 ] && c_unk "no repos found under $PROJECTS"
+  [ -z "$since" ] && c_unk "session start unknown -- TODO.md, memory and vault coverage"
+
+  if [ -n "$since" ]; then
+    if [ -d "$MEM" ]; then
+      c=$(find "$MEM" -maxdepth 1 -type f -newermt "$since" 2>/dev/null | grep -c .)
+      if [ "$c" -gt 0 ]; then c_info "memory: $c file(s) changed this session"
+      else c_info "memory: nothing changed this session -- if what is true changed, ask whether to record it"; fi
+    else
+      c_unk "memory folder not found at $MEM"
+    fi
+    if [ -n "$VAULT" ]; then
+      if [ -d "$VAULT" ]; then
+        c=$(find "$VAULT" -type f -newermt "$since" 2>/dev/null | grep -c .)
+        c_info "vault: $c file(s) changed this session"
+      else
+        c_unk "vault folder not found at $VAULT"
+      fi
+    fi
+  fi
+  [ -r "$STATE/wip.md" ] && c_info "in-flight note cleared by this wrap: $(cut -f2 "$STATE/wip.md")"
+  return 0
+}
+
 # The deliberate closeout. Called with a focus and pipe-separated bullets.
 wrap() {
   local previous=0
@@ -766,6 +846,9 @@ wrap() {
   # destroyed the note AND the session start while still printing "wrapped" --
   # three losses reported as a success. Log first; destroy only what the log
   # has actually replaced.
+  # Measure before writing: the row carries what the checks left open.
+  if [ -n "$MK" ] && [ -r "$MK" ]; then wrap_checks "$(cut -f1 "$MK")" "$(cut -f2 "$MK")"
+  else wrap_checks "" ""; fi
   local replaced=0
   if [ -n "$MK" ] && mark_wrapped "$MK"; then
     # W-8b · This session was wrapped already: correct that row, do not add one.
@@ -773,16 +856,16 @@ wrap() {
     sd=$(cut -f1 "$MK"); st=$(cut -f2 "$MK"); old_end=$(cut -f3 "$MK")
     LOGGED_END=$(date +%H:%M)
     replace_row "$sd" "$st" "$old_end" "wrapped" \
-      "$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$sd" "$st" "$LOGGED_END" "$focus" "$bullets" "wrapped")"
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s%s' "$sd" "$st" "$LOGGED_END" "$focus" "$bullets" "wrapped" "${OPEN_ITEMS:+$'\t'$OPEN_ITEMS}")"
     rc=$?
     if [ $rc -eq 0 ]; then replaced=1
     elif [ $rc -eq 3 ]; then
       # The earlier row is gone (dropped with `mindforge log --drop-last`, or
       # edited out by hand). Nothing to correct -- record this one as new.
-      log_row "$focus" "$bullets" "wrapped" "$MK" || rc=1
+      log_row "$focus" "$bullets" "wrapped" "$MK" "$OPEN_ITEMS" || rc=1
     fi
     [ $rc -eq 1 ] && { printf '%s  closeout NOT recorded -- nothing was cleared%s\n' "$R" "$O" >&2; return 1; }
-  elif ! log_row "$focus" "$bullets" "wrapped" "$MK"; then
+  elif ! log_row "$focus" "$bullets" "wrapped" "$MK" "$OPEN_ITEMS"; then
     printf '%s  closeout NOT recorded -- nothing was cleared%s\n' "$R" "$O" >&2
     return 1
   fi
@@ -797,24 +880,16 @@ wrap() {
     printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
   fi
   printf '%s\n' "$bullets" | tr '|' '\n' | sed 's/^/  · /'
-  # Anything left unpushed is the thing a closeout exists to catch.
-  local warned=0
-  while IFS= read -r d; do
-    [ -n "$d" ] || continue
-    local a; a=$(git -C "$d" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
-    if [ "${a:-0}" -gt 0 ] 2>/dev/null; then
-      printf '%s  ! %s has %s unpushed commit(s)%s\n' "$Y" "$(basename "$d")" "$a" "$O"; warned=1
-    fi
-    if ! git -C "$d" remote 2>/dev/null | grep -q .; then
-      printf '%s  ! %s has no remote -- it exists on this machine only%s\n' "$Y" "$(basename "$d")" "$O"; warned=1
-    fi
-  done < <(all_repos)
-  # F-17 · This was the last statement in the function, so when warned=1 its
-  # false branch became wrap's exit status: a successful closeout reported
-  # failure, broke && chains, and would mark a SessionEnd hook failed --
-  # exactly in the case where there IS unpushed work. The warning is output,
-  # not an error condition.
-  if [ $warned -eq 0 ]; then printf '%s  all repos pushed%s\n' "$D" "$O"; fi
+  printf '%s' "$CHECK_OUT"
+  # F-17 · Open items are output, not an error: wrap exits 0 either way. It
+  # used to exit 1 whenever it warned, which broke && chains and would mark a
+  # SessionEnd hook failed exactly when there WAS something to see.
+  if [ $((N_OPEN+N_UNVER)) -eq 0 ]; then
+    printf '%swrap clean%s -- every check above passed\n' "$G" "$O"
+  else
+    printf '%swrap NOT clean%s -- %s open, %s not verified. Stored with the row; the next brief shows them.\n' \
+      "$Y" "$O" "$N_OPEN" "$N_UNVER"
+  fi
   return 0
 }
 

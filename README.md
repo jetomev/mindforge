@@ -74,7 +74,7 @@ One command per turn - intro, command, expected result, then stop.
 | Command | Does |
 |---|---|
 | `mindforge brief` | what is true right now — local only, no network |
-| `mindforge wrap "<focus>" "<b1>\|<b2>"` | deliberate closeout; warns on unpushed work. Run it again in the same session to correct it |
+| `mindforge wrap "<focus>" "<b1>\|<b2>"` | deliberate closeout that measures: uncommitted, unpushed, no remote, stale `TODO.md` — and says **clean** or **NOT clean**. Run it again in the same session to correct it |
 | `mindforge wrap --previous "<focus>" "<b1>\|<b2>"` | close the last session that ended without a wrap, keeping its own times |
 | `mindforge wip "<note>"` | leave an in-flight note for the next session — `--show`, `--clear` |
 | `mindforge drift "<what slipped>"` | log a drift observation with a timestamp |
@@ -96,6 +96,13 @@ standing order, so the two now live apart.
 
 Hooks wire `brief` to session start and the closeout floor to session end, so
 neither depends on anyone remembering.
+
+`wrap` does not take "done" on trust. It checks every repo for uncommitted
+files, unpushed commits and a missing remote, and flags a project that got
+commits this session while its `TODO.md` did not. A check that cannot run is
+reported as **not verified**, never as a pass. Memory and vault changes are
+shown as facts, because when to write those is your call. Anything left open is
+stored with the session's row, and the next brief opens with it.
 
 A closeout can be corrected. Run `wrap` again in the same session and it
 replaces its own row, keeping the real start time. A session that ended without

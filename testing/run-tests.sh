@@ -49,7 +49,7 @@ mf() {
   env -i PATH="$SB/bin:$PATH" HOME="$SB/home" ${TZ:+TZ="$TZ"} \
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="$SB/projects" \
     MINDFORGE_MEMORY="$SB/mem" CLAUDE_CODE_SESSION_ID="$SID" \
-    SB_GH_STATE="${SB_GH_STATE:-}" \
+    SB_GH_STATE="${SB_GH_STATE:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
     bash "$MF" "$@"
 }
 
@@ -199,6 +199,88 @@ if begin "wrap keeps other rows"; then
   mf wrap 'two \\ with a backslash' "" >/dev/null
   check "three rows, in their order" \
     [ "$(grep -v '^#' "$SB/state/sessions.log" | cut -f4 | paste -sd,)" = 'older,two \\ with a backslash,someone else' ]
+  end
+fi
+
+# #27: wrap measures, and says NOT clean when something is open or unknown.
+g() { git -c user.name=t -c user.email=t@t -c core.autocrlf=false -C "$SB/projects/$1" "${@:2}"; }
+now_mark() { mkdir -p "$SB/state/marks"; printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$SB/state/marks/$SID"; }
+last_row() { grep -v '^#' "$SB/state/sessions.log" | tail -1; }
+if begin "wrap checks: clean"; then
+  make_repo alpha; now_mark
+  out=$(mf wrap "f" "b"); rc=$?
+  check "exits 0"                          [ "$rc" -eq 0 ]
+  check "says clean"                       grep -q 'wrap clean' <<<"$out"
+  check "counts the repo"                  grep -q '1 repos committed and pushed' <<<"$out"
+  check "row has no open field"            [ "$(last_row | awk -F'\t' '{print NF}')" -eq 6 ]
+  check "memory silence is info, not open" grep -q 'memory: nothing changed' <<<"$out"
+  end
+fi
+if begin "wrap checks: uncommitted"; then
+  make_repo alpha; now_mark; echo x > "$SB/projects/alpha/new"
+  out=$(mf wrap "f" "b"); rc=$?
+  check "still exits 0"                    [ "$rc" -eq 0 ]
+  check "says NOT clean"                   grep -q 'wrap NOT clean -- 1 open, 0 not verified' <<<"$out"
+  check "names the repo"                   grep -q 'alpha: 1 uncommitted file' <<<"$out"
+  check "the row carries it"               [ "$(last_row | cut -f7)" = "alpha: 1 uncommitted file(s)" ]
+  check "the next brief shows it"          grep -q 'open at the last wrap.*alpha: 1 uncommitted' <<<"$(mf brief --headline)"
+  rm "$SB/projects/alpha/new"
+  out=$(mf wrap "f2" "b")
+  check "a corrected wrap clears it"       [ "$(last_row | awk -F'\t' '{print NF}')" -eq 6 ]
+  check "and the brief stops saying it"    bash -c '! grep -q "open at the last wrap" <<<"$1"' _ "$(mf brief --headline)"
+  end
+fi
+if begin "wrap checks: unpushed"; then
+  make_repo alpha; now_mark; commit_unpushed alpha
+  check "counts unpushed commits"          grep -q 'alpha: 1 unpushed commit' <<<"$(mf wrap f b)"
+  end
+fi
+if begin "wrap checks: no upstream"; then
+  make_repo alpha; now_mark; g alpha checkout -q -b side
+  out=$(mf wrap f b)
+  check "cannot count, so says so"         grep -q 'alpha: no upstream branch.*NOT verified' <<<"$out"
+  check "and is not clean"                 grep -q '0 open, 1 not verified' <<<"$out"
+  end
+fi
+if begin "wrap checks: no remote"; then
+  mkdir -p "$SB/projects/solo"; g solo init -q; echo a > "$SB/projects/solo/f"; g solo add f; g solo commit -qm a
+  now_mark
+  check "no remote is open"                grep -q 'solo: no remote' <<<"$(mf wrap f b)"
+  end
+fi
+if begin "wrap checks: TODO.md"; then
+  make_repo alpha; echo list > "$SB/projects/alpha/TODO.md"; g alpha add TODO.md
+  GIT_COMMITTER_DATE="2026-01-01 00:00" g alpha commit -qm todo --date "2026-01-01 00:00"
+  g alpha push -q origin main 2>/dev/null
+  now_mark
+  check "no work this session: not flagged" bash -c '! grep -q "TODO.md not updated" <<<"$1"' _ "$(mf wrap f b)"
+  commit_unpushed alpha; g alpha push -q origin main 2>/dev/null
+  check "work without the list: flagged"   grep -q 'alpha: 1 commit(s) this session, TODO.md not updated' <<<"$(mf wrap f b)"
+  echo more >> "$SB/projects/alpha/TODO.md"; g alpha commit -qam todo2; g alpha push -q origin main 2>/dev/null
+  out=$(mf wrap f b)
+  check "list updated: not flagged"        bash -c '! grep -q "TODO.md not updated" <<<"$1"' _ "$out"
+  check "and clean"                        grep -q 'wrap clean' <<<"$out"
+  end
+fi
+if begin "wrap checks: start unknown"; then
+  make_repo alpha
+  out=$(mf wrap f b)
+  check "no mark: coverage NOT verified"   grep -q 'session start unknown.*NOT verified' <<<"$out"
+  check "and not clean"                    grep -q 'wrap NOT clean' <<<"$out"
+  end
+fi
+if begin "wrap checks: vault"; then
+  make_repo alpha; now_mark; mkdir -p "$SB/vault"
+  out=$(SB_VAULT="$SB/vault" mf wrap f b)
+  check "vault silence is info"            grep -q 'vault: 0 file(s) changed' <<<"$out"
+  check "and does not block clean"         grep -q 'wrap clean' <<<"$out"
+  out=$(SB_VAULT="$SB/nowhere" mf wrap f b)
+  check "a missing vault is NOT verified"  grep -q 'vault folder not found.*NOT verified' <<<"$out"
+  end
+fi
+if begin "wrap checks: in-flight note"; then
+  make_repo alpha; now_mark; printf 'x\thalf-done thing\n' > "$SB/state/wip.md"
+  check "shows the note it clears"         grep -q 'in-flight note cleared by this wrap: half-done thing' <<<"$(mf wrap f b)"
   end
 fi
 
