@@ -124,6 +124,10 @@ headline() {
     local d f n; d=$(cut -f1 <<<"$L"); f=$(cut -f4 <<<"$L"); n=$(days_since "$d")
     case $n in 0) when="today";; 1) when="yesterday";; *) when="$n days ago";; esac
     printf 'last session: %s (%s) — %s\n' "$when" "$(cut -f2 <<<"$L")–$(cut -f3 <<<"$L")" "$f"
+    # W-8d · Ask the human; do not reconstruct. The earlier conversation is
+    # not this one, and guessing what it did is how a log starts to lie.
+    [ "$f" = "(not wrapped)" ] && \
+      printf '  %s→ ask the human what that session did, then: mindforge wrap --previous "<focus>" "<b1>|<b2>"%s\n' "$D" "$O"
   else
     printf '%slast session: none recorded%s\n' "$D" "$O"
   fi
@@ -578,10 +582,29 @@ SID="${CLAUDE_CODE_SESSION_ID:-}"
 LEGACY_MARK="$STATE/.session-start"
 
 own_mark()    { [ -n "$SID" ] && printf '%s/%s' "$MARKS" "$SID" || printf '%s/_nosession' "$MARKS"; }
-oldest_mark() { ls -1t "$MARKS"/* 2>/dev/null | tail -1; }
+
+# W-8b · A mark now outlives the wrap. wrap writes the end time of its row into
+# the mark as a third field instead of deleting it, so a second wrap in the
+# same session REPLACES that row and keeps the real start, and session-end
+# knows the session is already closed. Deleting the mark made one mistaken
+# wrap permanent: the correct wrap after `wrap --help` had no start left and
+# logged the session as 10:38-10:38.
+mark_wrapped() { [ -n "$(cut -sf3 "$1" 2>/dev/null)" ]; }
+
+# Which session is wrap closing? Its own, when it knows its id. From the
+# human's shell: the OLDEST mark not yet wrapped (see F-7 above); failing
+# that, the most recently wrapped one, so a corrected wrap still finds its row.
+pick_mark() {
+  if [ -n "$SID" ] && [ -r "$(own_mark)" ]; then own_mark; return 0; fi
+  local m
+  while IFS= read -r m; do
+    mark_wrapped "$m" || { printf '%s' "$m"; return 0; }
+  done < <(ls -1tr "$MARKS"/* 2>/dev/null)
+  ls -1t "$MARKS"/* 2>/dev/null | head -1
+}
 
 # Marks outlive sessions that died without firing SessionEnd. Sweep anything
-# older than the cutoff so oldest_mark() cannot select a corpse.
+# older than the cutoff so pick_mark() cannot select a corpse.
 sweep_marks() {
   [ -d "$MARKS" ] || return 0
   find "$MARKS" -maxdepth 1 -type f -mmin "+$(( ${MINDFORGE_MARK_TTL_H:-12} * 60 ))" -delete 2>/dev/null || true
@@ -663,38 +686,108 @@ can_write() {
   fi
 }
 
+log_unwritable() {
+  printf '%smindforge: cannot write %s -- row NOT logged%s\n' \
+    "$R" "$STATE/sessions.log" "$O" >&2
+}
+
 # Append one row. Fields: date start end focus bullets kind
+# The end time it wrote is left in LOGGED_END, so wrap can record it in the mark.
 log_row() {
   local start_d start_t m="${4:-}"
   if [ -n "$m" ] && [ -r "$m" ]; then start_d=$(cut -f1 "$m"); start_t=$(cut -f2 "$m")
   else start_d=$(date +%F); start_t=$(date +%H:%M); fi
-  if ! can_write "$STATE/sessions.log"; then
-    printf '%smindforge: cannot write %s -- row NOT logged%s\n' \
-      "$R" "$STATE/sessions.log" "$O" >&2
-    return 1
-  fi
+  can_write "$STATE/sessions.log" || { log_unwritable; return 1; }
+  LOGGED_END=$(date +%H:%M)
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$start_d" "$start_t" "$(date +%H:%M)" "$1" "$2" "$3" >> "$STATE/sessions.log"
+    "$start_d" "$start_t" "$LOGGED_END" "$1" "$2" "$3" >> "$STATE/sessions.log"
+}
+
+# Replace the LAST row whose date, start, end and kind match with <new row>.
+# Every other byte of the log is copied untouched, into a temp file that is
+# then moved into place -- a failure part-way leaves the old log whole.
+#   replace_row <date> <start> <end> <kind> <new row>
+# Returns 3 when no row matched (nothing written), 1 when the write failed.
+replace_row() {
+  local log="$STATE/sessions.log" tmp rc
+  can_write "$log" && [ -w "$STATE" ] || { log_unwritable; return 1; }
+  tmp=$(mktemp "$STATE/.sessions.XXXXXX") || { log_unwritable; return 1; }
+  # Values go in through the environment: awk -v would rewrite any backslash
+  # in a focus or bullet.
+  D="$1" S="$2" E="$3" K="$4" NEW="$5" awk -F'\t' '
+    { line[NR] = $0
+      if ($1 == ENVIRON["D"] && $2 == ENVIRON["S"] && $3 == ENVIRON["E"] && $6 == ENVIRON["K"]) hit = NR }
+    END { if (!hit) exit 3
+          for (i = 1; i <= NR; i++) print (i == hit ? ENVIRON["NEW"] : line[i]) }' "$log" > "$tmp"
+  rc=$?
+  if [ $rc -ne 0 ]; then rm -f "$tmp"; [ $rc -eq 3 ] && return 3; log_unwritable; return 1; fi
+  chmod --reference="$log" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$log" || { rm -f "$tmp"; log_unwritable; return 1; }
+}
+
+# W-8a · An option is not a focus. wrap took its first argument as the focus
+# with no check, so `wrap --help` -- run by an assistant learning the syntax --
+# recorded a real closeout titled "--help", deleted the in-flight note and
+# spent the session mark. drift had the same hole. `--help` is answered by the
+# dispatcher before any command runs; any other leading dash is refused here,
+# before anything is written. A note that really starts with a dash goes
+# after `--`.
+bad_option() {
+  printf 'mindforge %s: unknown option %s  (a note starting with "-" goes after --)\n' "$1" "$2" >&2
+  exit 2
 }
 
 # The deliberate closeout. Called with a focus and pipe-separated bullets.
 wrap() {
+  local previous=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --previous) previous=1; shift ;;
+      -h|--help)  usage; exit 0 ;;
+      --) shift; break ;;
+      -*) bad_option wrap "$1" ;;
+      *)  break ;;
+    esac
+  done
   local focus="${1:-}" bullets="${2:-}"
-  [ -z "$focus" ] && { echo "usage: mindforge wrap \"<focus>\" \"<b1>|<b2>|...\"" >&2; exit 2; }
-  local MK; MK=$(oldest_mark)
+  [ -z "$focus" ] && { echo "usage: mindforge wrap [--previous] \"<focus>\" \"<b1>|<b2>|...\"" >&2; exit 2; }
+  [ $previous -eq 1 ] && { wrap_previous "$focus" "$bullets"; return; }
+  local MK; MK=$(pick_mark)
   # F-25 · Order matters as much as the guard. This deleted the in-flight note
   # first and dropped the mark unconditionally, so a log write that failed
   # destroyed the note AND the session start while still printing "wrapped" --
   # three losses reported as a success. Log first; destroy only what the log
   # has actually replaced.
-  if ! log_row "$focus" "$bullets" "wrapped" "$MK"; then
+  local replaced=0
+  if [ -n "$MK" ] && mark_wrapped "$MK"; then
+    # W-8b · This session was wrapped already: correct that row, do not add one.
+    local sd st old_end rc
+    sd=$(cut -f1 "$MK"); st=$(cut -f2 "$MK"); old_end=$(cut -f3 "$MK")
+    LOGGED_END=$(date +%H:%M)
+    replace_row "$sd" "$st" "$old_end" "wrapped" \
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$sd" "$st" "$LOGGED_END" "$focus" "$bullets" "wrapped")"
+    rc=$?
+    if [ $rc -eq 0 ]; then replaced=1
+    elif [ $rc -eq 3 ]; then
+      # The earlier row is gone (dropped with `mindforge log --drop-last`, or
+      # edited out by hand). Nothing to correct -- record this one as new.
+      log_row "$focus" "$bullets" "wrapped" "$MK" || rc=1
+    fi
+    [ $rc -eq 1 ] && { printf '%s  closeout NOT recorded -- nothing was cleared%s\n' "$R" "$O" >&2; return 1; }
+  elif ! log_row "$focus" "$bullets" "wrapped" "$MK"; then
     printf '%s  closeout NOT recorded -- nothing was cleared%s\n' "$R" "$O" >&2
     return 1
   fi
   rm -f "$STATE/wip.md"          # wrapped work is no longer in flight
-  [ -n "$MK" ] && rm -f "$MK"
+  # The mark stays, stamped with this row's end, until session-end spends it.
+  [ -n "$MK" ] && [ -r "$MK" ] && \
+    printf '%s\t%s\t%s\n' "$(cut -f1 "$MK")" "$(cut -f2 "$MK")" "$LOGGED_END" > "$MK"
   rm -f "$LEGACY_MARK"
-  printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
+  if [ $replaced -eq 1 ]; then
+    printf '%swrapped:%s %s  %s(replaces this session'"'"'s earlier wrap)%s\n' "$G" "$O" "$focus" "$D" "$O"
+  else
+    printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
+  fi
   printf '%s\n' "$bullets" | tr '|' '\n' | sed 's/^/  · /'
   # Anything left unpushed is the thing a closeout exists to catch.
   local warned=0
@@ -727,7 +820,9 @@ MIN_SESSION_MIN="${MINDFORGE_MIN_SESSION_MIN:-2}"
 
 session_end() {
   local MK; MK=$(own_mark)
-  [ -r "$MK" ] || exit 0            # already wrapped, or never started
+  [ -r "$MK" ] || exit 0            # never started, or swept
+  # Wrapped already: the row exists, so the mark is simply spent.
+  mark_wrapped "$MK" && { rm -f "$MK"; exit 0; }
   local sd st epoch
   sd=$(cut -f1 "$MK"); st=$(cut -f2 "$MK")
   epoch=$(date -d "$sd $st" +%s 2>/dev/null || true)
@@ -747,6 +842,70 @@ session_end() {
   [ "$logged" -eq 1 ] && rm -f "$MK"
 }
 
+# W-8d · A conversation that ended without a wrap left a "(not wrapped)" row
+# that nothing could ever close: wrap only appends, and it belongs to the
+# CURRENT session. `wrap --previous` closes the most recent such row in place,
+# keeping its own date and times. It touches neither the in-flight note nor
+# any mark -- the session running now is still open. What the earlier session
+# did is the human's to say; the brief asks, it does not reconstruct.
+wrap_previous() {
+  local row
+  row=$(awk -F'\t' '!/^#/ && $4 == "(not wrapped)" && $6 == "auto"' "$STATE/sessions.log" 2>/dev/null | tail -1)
+  if [ -z "$row" ]; then
+    echo "mindforge wrap --previous: no session is waiting for a wrap -- nothing written" >&2
+    return 1
+  fi
+  local d s e
+  d=$(cut -f1 <<<"$row"); s=$(cut -f2 <<<"$row"); e=$(cut -f3 <<<"$row")
+  replace_row "$d" "$s" "$e" "auto" \
+    "$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$d" "$s" "$e" "$1" "$2" "wrapped")" \
+    || { printf '%s  closeout NOT recorded%s\n' "$R" "$O" >&2; return 1; }
+  printf '%swrapped earlier session:%s %s %s–%s · %s\n' "$G" "$O" "$d" "$s" "$e" "$1"
+  printf '%s\n' "$2" | tr '|' '\n' | grep -v '^$' | sed 's/^/  · /'
+  return 0
+}
+
+# W-8c · Repairing the log is a command mindForge owns, not a hand edit.
+# The hand edit needed the human every time: an assistant's auto mode rightly
+# refuses to rewrite a log, so a bad row -- like the "--help" wrap -- stayed
+# until someone typed the fix. --drop-last removes exactly one row, the last,
+# prints it, and keeps a timestamped copy of the log from before.
+log_cmd() {
+  local log="$STATE/sessions.log"
+  case "${1:-}" in
+    "")
+      grep -v '^#' "$log" 2>/dev/null | grep -v '^$' | tail -"${MINDFORGE_LOG_ROWS:-10}" \
+        | awk -F'\t' '{ printf "%s %s–%s  %-7s %s\n", $1, $2, $3, $6, $4 }'
+      return 0 ;;
+    --drop-last) ;;
+    *) bad_option log "$1" ;;
+  esac
+  local last n
+  last=$(grep -v '^#' "$log" 2>/dev/null | grep -v '^$' | tail -1)
+  [ -n "$last" ] || { echo "mindforge log: the log has no rows -- nothing dropped" >&2; return 1; }
+  can_write "$log" && [ -w "$STATE" ] || { log_unwritable; return 1; }
+  local bak; bak="$log.bak-$(date +%Y%m%d-%H%M%S)"
+  cp -p "$log" "$bak" || { echo "mindforge log: could not save a backup -- nothing dropped" >&2; return 1; }
+  local tmp; tmp=$(mktemp "$STATE/.sessions.XXXXXX") || { log_unwritable; return 1; }
+  # The last non-comment, non-blank line, found by number so an identical
+  # earlier row survives.
+  n=$(grep -nv '^#' "$log" | grep -v '^[0-9]*:$' | tail -1 | cut -d: -f1)
+  sed "${n}d" "$log" > "$tmp" || { rm -f "$tmp"; log_unwritable; return 1; }
+  chmod --reference="$log" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$log" || { rm -f "$tmp"; log_unwritable; return 1; }
+  # A mark that points at the dropped row is no longer wrapped: without this,
+  # session-end would treat the session as closed and log nothing at all.
+  local m d s e
+  d=$(cut -f1 <<<"$last"); s=$(cut -f2 <<<"$last"); e=$(cut -f3 <<<"$last")
+  for m in "$MARKS"/*; do
+    [ -r "$m" ] && mark_wrapped "$m" || continue
+    [ "$(cut -f1 "$m")" = "$d" ] && [ "$(cut -f2 "$m")" = "$s" ] && [ "$(cut -f3 "$m")" = "$e" ] \
+      && printf '%s\t%s\n' "$d" "$s" > "$m"
+  done
+  printf 'dropped: %s\n' "$(awk -F'\t' '{ printf "%s %s–%s  %s  %s", $1, $2, $3, $6, $4 }' <<<"$last")"
+  printf '%sbackup:  %s%s\n' "$D" "$bak" "$O"
+}
+
 # F-12 · The mid-session sibling of wrap.
 # git can show that 89 lines changed. It cannot say "written, tested, pending
 # release" -- and that sentence is the whole difference between a fresh
@@ -754,11 +913,16 @@ session_end() {
 # wip records what is still in the air. Cleared automatically by wrap, because
 # work that has been wrapped is by definition no longer in flight.
 wip() {
-  local note="${*:-}"
-  case "$note" in
-    ""|--show) [ -r "$STATE/wip.md" ] && cat "$STATE/wip.md" || echo "nothing in flight"; return 0 ;;
-    --clear)   rm -f "$STATE/wip.md"; echo "in-flight note cleared"; return 0 ;;
+  case "${1:-}" in
+    --clear) rm -f "$STATE/wip.md"; echo "in-flight note cleared"; return 0 ;;
+    --)      shift ;;
+    --show)  set -- ;;
+    -*)      bad_option wip "$1" ;;
   esac
+  local note="${*:-}"
+  if [ -z "$note" ]; then
+    [ -r "$STATE/wip.md" ] && cat "$STATE/wip.md" || echo "nothing in flight"; return 0
+  fi
   if ! can_write "$STATE/wip.md"; then
     printf '%smindforge: cannot write %s -- note NOT stored%s\n' \
       "$R" "$STATE/wip.md" "$O" >&2
@@ -770,14 +934,42 @@ wip() {
 
 # One keystroke when drift is caught. Data beats impressions.
 drift() {
+  case "${1:-}" in
+    --) shift ;;
+    -*) bad_option drift "$1" ;;
+  esac
   local note="${*:-}"
   [ -z "$note" ] && { echo "usage: mindforge drift \"<what slipped>\"" >&2; exit 2; }
   printf '%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$note" >> "$STATE/drift.log"
   printf '%slogged.%s %s drift note(s) so far.\n' "$Y" "$O" "$(grep -c . "$STATE/drift.log")"
 }
 
+usage() {
+  cat <<'USAGE'
+usage:
+  mindforge brief [--headline]     what is true right now
+  mindforge wip "<what is half-done>"    record work still in the air
+  mindforge wip --show | --clear
+  mindforge wrap "<focus>" "<b1>|<b2>"   close the session deliberately
+                                         (again in the same session: corrects it)
+  mindforge wrap --previous "<focus>" "<b1>|<b2>"
+                                         close the last session that ended unwrapped
+  mindforge drift "<what slipped>"       log a drift observation
+  mindforge log [--drop-last]            recent rows / remove the last (backup kept)
+  mindforge rot                          the silent-failure checks
+  mindforge session-start|session-end    (called by hooks)
+  mindforge --version
+A note that starts with "-" goes after --, e.g. mindforge drift -- "-x ignored"
+USAGE
+}
+
+# W-8a · Help is answered before any command runs, for every command, so
+# asking how a command works can never be the thing that runs it.
+case "${2:-}" in -h|--help) usage; exit 0 ;; esac
+
 case "${1:-brief}" in
   -V|--version|version) printf 'mindforge %s\n' "$VERSION" ;;
+  -h|--help|help) usage ;;
   brief) [ "${2:-}" = "--headline" ] && headline || full ;;
   wip)           shift; wip "$@" ;;
   rot)           rot ;;
@@ -785,15 +977,6 @@ case "${1:-brief}" in
   session-end)   session_end ;;
   wrap)          shift; wrap "$@" ;;
   drift)         shift; drift "$@" ;;
-  *) cat >&2 <<'USAGE'
-usage:
-  mindforge brief [--headline]     what is true right now
-  mindforge wip "<what is half-done>"    record work still in the air
-  mindforge wip --show | --clear
-  mindforge wrap "<focus>" "<b1>|<b2>"   close the session deliberately
-  mindforge drift "<what slipped>"       log a drift observation
-  mindforge session-start|session-end    (called by hooks)
-  mindforge --version
-USAGE
-     exit 2 ;;
+  log)           shift; log_cmd "$@" ;;
+  *) usage >&2; exit 2 ;;
 esac

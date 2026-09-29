@@ -74,10 +74,12 @@ One command per turn - intro, command, expected result, then stop.
 | Command | Does |
 |---|---|
 | `mindforge brief` | what is true right now — local only, no network |
-| `mindforge wrap "<focus>" "<b1>\|<b2>"` | deliberate closeout; warns on unpushed work |
+| `mindforge wrap "<focus>" "<b1>\|<b2>"` | deliberate closeout; warns on unpushed work. Run it again in the same session to correct it |
+| `mindforge wrap --previous "<focus>" "<b1>\|<b2>"` | close the last session that ended without a wrap, keeping its own times |
 | `mindforge wip "<note>"` | leave an in-flight note for the next session — `--show`, `--clear` |
 | `mindforge drift "<what slipped>"` | log a drift observation with a timestamp |
 | `mindforge rot` | the silent-failure checks, on their own |
+| `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
 
 Two files hold your rules, and the difference is the whole point:
 

@@ -146,21 +146,115 @@ if begin "wrap-no-args"; then
   end
 fi
 
-# W-8a: an option is not a focus.
-for a in --help -h; do
-  if begin "wrap $a"; then
+# W-8a (#22): an option is not a focus. Help is answered, never recorded.
+for a in "wrap --help" "wrap -h" "drift --help" "wip --help" "wrap --previous --help"; do
+  if begin "$a"; then
     mkdir -p "$SB/state/marks"; printf '2026-09-18\t07:00\n' > "$SB/state/marks/$SID"
     printf 'x\tnote\n' > "$SB/state/wip.md"
-    before=$(snap "$SB/state"); mf wrap "$a" >/dev/null 2>&1; rc=$?
-    xfail "#22 W-8a" "exits 2"             [ "$rc" -eq 2 ]
-    xfail "#22 W-8a" "leaves state byte-identical" [ "$(snap "$SB/state")" = "$before" ]
+    before=$(snap "$SB/state"); out=$(mf $a 2>&1); rc=$?
+    check "exits 0"                        [ "$rc" -eq 0 ]
+    check "prints usage"                   grep -q '^usage:' <<<"$out"
+    check "leaves state byte-identical"    [ "$(snap "$SB/state")" = "$before" ]
     end
   fi
 done
-if begin "drift --help"; then
-  before=$(snap "$SB/state"); mf drift --help >/dev/null 2>&1; rc=$?
-  xfail "#22 W-8a" "exits 2"               [ "$rc" -eq 2 ]
-  xfail "#22 W-8a" "logs no drift note"    [ "$(snap "$SB/state")" = "$before" ]
+for a in "wrap --bogus" "drift -x" "wip -x" "log --bogus"; do
+  if begin "$a"; then
+    mkdir -p "$SB/state/marks"; printf '2026-09-18\t07:00\n' > "$SB/state/marks/$SID"
+    printf 'x\tnote\n' > "$SB/state/wip.md"
+    before=$(snap "$SB/state"); mf $a >/dev/null 2>&1; rc=$?
+    check "refused: exits 2"               [ "$rc" -eq 2 ]
+    check "writes nothing"                 [ "$(snap "$SB/state")" = "$before" ]
+    end
+  fi
+done
+if begin "drift --"; then
+  mf drift -- "-x a note with a dash" >/dev/null
+  check "a note after -- is logged as written" grep -q $'\t-x a note with a dash$' "$SB/state/drift.log"
+  end
+fi
+
+# W-8b (#22): a second wrap in the same session corrects the first.
+if begin "wrap twice"; then
+  mkdir -p "$SB/state/marks"; printf '2026-09-18\t07:00\n' > "$SB/state/marks/$SID"
+  mf wrap "a mistaken focus" "bad" >/dev/null
+  check "first wrap keeps the mark, stamped" \
+    awk -F'\t' 'NR==1 && $1=="2026-09-18" && $2=="07:00" && $3!=""{f=1} END{exit !f}' "$SB/state/marks/$SID"
+  out=$(mf wrap "the real focus" "a|b"); rc=$?
+  check "second wrap exits 0"              [ "$rc" -eq 0 ]
+  check "says it replaced the earlier wrap" grep -q 'replaces' <<<"$out"
+  check "still exactly one row"            [ "$(rows)" -eq 1 ]
+  check "row has the real focus and the original start" \
+    awk -F'\t' '!/^#/ && $1=="2026-09-18" && $2=="07:00" && $4=="the real focus" && $5=="a|b" && $6=="wrapped"{f=1} END{exit !f}' "$SB/state/sessions.log"
+  mf session-end
+  check "session-end after a wrap adds no row" [ "$(rows)" -eq 1 ]
+  check "session-end spends the mark"      [ ! -e "$SB/state/marks/$SID" ]
+  end
+fi
+if begin "wrap keeps other rows"; then
+  printf '2026-09-17\t09:00\t10:00\tolder\t\twrapped\n' >> "$SB/state/sessions.log"
+  mkdir -p "$SB/state/marks"; printf '2026-09-18\t07:00\n' > "$SB/state/marks/$SID"
+  mf wrap "one" "" >/dev/null
+  printf '2026-09-18\t07:30\t07:40\tsomeone else\t\tauto\n' >> "$SB/state/sessions.log"
+  mf wrap 'two \\ with a backslash' "" >/dev/null
+  check "three rows, in their order" \
+    [ "$(grep -v '^#' "$SB/state/sessions.log" | cut -f4 | paste -sd,)" = 'older,two \\ with a backslash,someone else' ]
+  end
+fi
+
+# W-8d (#22): an unwrapped session can be closed later, in place.
+if begin "wrap --previous"; then
+  printf '2026-09-17\t09:31\t10:10\t(not wrapped)\t\tauto\n' >> "$SB/state/sessions.log"
+  printf '2026-09-17\t11:00\t12:00\tlater\t\twrapped\n' >> "$SB/state/sessions.log"
+  mkdir -p "$SB/state/marks"; printf '2026-09-18\t07:00\n' > "$SB/state/marks/$SID"
+  printf 'x\tnote\n' > "$SB/state/wip.md"
+  mf wrap --previous "what it did" "x|y" >/dev/null; rc=$?
+  check "exits 0"                          [ "$rc" -eq 0 ]
+  check "the row is closed with its own times" \
+    awk -F'\t' 'NR==2 && $1=="2026-09-17" && $2=="09:31" && $3=="10:10" && $4=="what it did" && $5=="x|y" && $6=="wrapped"{f=1} END{exit !f}' "$SB/state/sessions.log"
+  check "no row added"                     [ "$(rows)" -eq 2 ]
+  check "this session's mark untouched"    [ "$(cat "$SB/state/marks/$SID")" = $'2026-09-18\t07:00' ]
+  check "in-flight note untouched"         [ -e "$SB/state/wip.md" ]
+  end
+fi
+if begin "wrap --previous, nothing to close"; then
+  printf '2026-09-17\t11:00\t12:00\tlater\t\twrapped\n' >> "$SB/state/sessions.log"
+  before=$(snap "$SB/state"); mf wrap --previous "x" "" >/dev/null 2>&1; rc=$?
+  check "exits 1"                          [ "$rc" -eq 1 ]
+  check "writes nothing"                   [ "$(snap "$SB/state")" = "$before" ]
+  end
+fi
+if begin "headline asks about an unwrapped session"; then
+  printf '%s\t09:31\t10:10\t(not wrapped)\t\tauto\n' "$(date +%F)" >> "$SB/state/sessions.log"
+  check "points at wrap --previous"        grep -q 'wrap --previous' <<<"$(mf brief --headline)"
+  printf '%s\t11:00\t12:00\tdone\t\twrapped\n' "$(date +%F)" >> "$SB/state/sessions.log"
+  check "silent once the last one is wrapped" bash -c '! grep -q "wrap --previous" <<<"$1"' _ "$(mf brief --headline)"
+  end
+fi
+
+# W-8c (#22): log repair is a command, with a backup.
+if begin "log --drop-last"; then
+  mkdir -p "$SB/state/marks"; printf '2026-09-18\t07:00\n' > "$SB/state/marks/$SID"
+  printf '2026-09-17\t09:00\t10:00\tkeep\t\twrapped\n' >> "$SB/state/sessions.log"
+  mf wrap "--mistake" "" >/dev/null 2>&1   # refused, so wrap for real:
+  mf wrap -- "--mistake" "" >/dev/null
+  before=$(cat "$SB/state/sessions.log")
+  out=$(mf log --drop-last); rc=$?
+  check "exits 0"                          [ "$rc" -eq 0 ]
+  check "prints the dropped row"           grep -q 'dropped:.*--mistake' <<<"$out"
+  check "only the last row went"           [ "$(grep -v '^#' "$SB/state/sessions.log" | cut -f4)" = "keep" ]
+  check "backup holds the log from before" \
+    [ "$(cat "$SB/state"/sessions.log.bak-*)" = "$before" ]
+  check "the mark is no longer wrapped"    [ "$(cat "$SB/state/marks/$SID")" = $'2026-09-18\t07:00' ]
+  mf session-end
+  check "so session-end still records the session" \
+    awk -F'\t' '!/^#/ && $4=="(not wrapped)"{n++} END{exit n!=1}' "$SB/state/sessions.log"
+  end
+fi
+if begin "log --drop-last, empty log"; then
+  before=$(snap "$SB/state"); mf log --drop-last >/dev/null 2>&1; rc=$?
+  check "exits 1"                          [ "$rc" -eq 1 ]
+  check "writes nothing"                   [ "$(snap "$SB/state")" = "$before" ]
   end
 fi
 
