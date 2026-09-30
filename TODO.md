@@ -24,6 +24,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **#25** · A warning written in a decision document does not reach the script that needs it.
 - [ ] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway.
 - [ ] **#28** · The one-slot handoff note is maintained by nothing — the same failure as the old queue file.
+- [ ] **#37** · S-10: the active-project banner is maintained by nothing — it announced DecadeDrop at the start of a hypeForge session (found 2026-09-29).
 - [ ] **#30** · A relayed handoff carried one machine's way of working to another.
 - [ ] **#31** · The test-matrix advice about sandboxes behaves differently on every machine.
 
