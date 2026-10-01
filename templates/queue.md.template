@@ -30,5 +30,11 @@
 # Comma-joined names share a tier, for two things that are both first --
 # a dated launch does not wait its turn behind a standing ranking.
 @priority project-a,project-c project-b
+#
+# R11 names any repo under a root with commits in the last 14 days
+# (MINDFORGE_ACTIVE_DAYS) and no line here -- a missing row is not shown as
+# stale, it is simply not shown. A repo you deliberately do not track goes on
+# an @quiet line, so the opt-out is visible. aur-<name> twins ride on <name>.
+@quiet scratch-repo
 project-a	#12 the thing you are actually doing next	5	no	#12
 project-b	v2.0.0 milestone with no single issue	3	waits:project-a#12	-

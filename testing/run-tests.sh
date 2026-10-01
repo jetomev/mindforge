@@ -429,7 +429,7 @@ if begin "session-start runs the rot check"; then
   gh_repo alpha
   printf 'alpha\tthe task\t3\t-\t#7\n' > "$SB/state/queue.md"
   out=$(SB_GH_STATE=CLOSED mf session-start)
-  check "prints the rot check section"     grep -q '^rot check (R1-R9):' <<<"$out"
+  check "prints the rot check section"     grep -q '^rot check (R1-R11):' <<<"$out"
   check "inside the briefing tags"         bash -c 'sed -n "/^<session-briefing>/,/^<\/session-briefing>/p" <<<"$1" | grep -q "^rot check"' _ "$out"
   check "carries an R8 finding"            grep -q 'R8.*#7 is CLOSED' <<<"$out"
   check "the directive asks for findings"  grep -q 'Name every rot-check finding' <<<"$out"
@@ -565,6 +565,44 @@ if begin "rot"; then
   echo b > "$SB/mem/b.md"
   out=$(mf rot)
   check "R4 names an unindexed file"       grep -q 'R4.*b.md' <<<"$out"
+  end
+fi
+
+# #39 · R11: recent work the queue does not name. Failing direction first --
+# the missing repo MUST be named -- then every deliberate way out stays quiet.
+old_commit() {   # old_commit <repo>: its only commit moved back to 2020
+  GIT_COMMITTER_DATE='2020-01-01T00:00:00' git -c user.name=t -c user.email=t@t \
+    -C "$SB/projects/$1" commit -q --amend --no-edit --date='2020-01-01T00:00:00'
+}
+if begin "R11 active work missing from the queue"; then
+  make_repo listed; make_repo forgotten; make_repo aur-listed; make_repo aur-listed-remote
+  make_repo parked; make_repo ancient; old_commit ancient
+  make_repo mono; mkdir -p "$SB/projects/mono/sub"
+  printf '@quiet parked\nlisted\tthe task\t3\tno\t-\nmono/sub\tthe sub task\t2\tno\t-\n' > "$SB/state/queue.md"
+  out=$(mf rot)
+  check "a recently active repo with no queue line is named" grep -q 'R11.*forgotten has commits from' <<<"$out"
+  check "exactly one R11 (only the forgotten repo)"         [ "$(grep -c 'R11' <<<"$out")" -eq 1 ]
+  check "a queued repo is not named"                        bash -c '! grep -q "R11.*listed has" <<<"$1"' _ "$out"
+  check "its AUR twins are not named"                       bash -c '! grep -q "R11.*aur-listed" <<<"$1"' _ "$out"
+  check "an @quiet repo is not named"                       bash -c '! grep -q "R11.*parked" <<<"$1"' _ "$out"
+  check "an old repo is not named"                          bash -c '! grep -q "R11.*ancient" <<<"$1"' _ "$out"
+  check "a monorepo covered by a sub-project is not named"  bash -c '! grep -q "R11.*mono" <<<"$1"' _ "$out"
+  # Setup assertion: the old commit really is old, or the line above proves nothing.
+  check "setup: ancient's commit is from 2020"              [ "$(git -C "$SB/projects/ancient" log -1 --format=%cs)" = 2020-01-01 ]
+  rm "$SB/state/queue.md"
+  check "no queue.md is first-run, not R11"                 bash -c '! grep -q "R11" <<<"$1"' _ "$(mf rot)"
+  end
+fi
+
+# #40 · a name longer than 20 characters must not push its row out of line.
+if begin "projects table lines up with a long name"; then
+  make_repo short; make_repo a-twenty-one-chars-xx
+  printf 'short\tone\t3\tno\t-\na-twenty-one-chars-xx\ttwo\t3\tno\t-\n' > "$SB/state/queue.md"
+  out=$(mf brief | sed -n '/^Projects/,/^$/p')
+  check "setup: the long name is 21 characters"  [ "$(printf a-twenty-one-chars-xx | wc -c)" -eq 21 ]
+  cols=$(awk 'NR==2{print index($0,"LAST")} NR>2 && match($0,/[0-9]{4}-[0-9]{2}-[0-9]{2}/){print RSTART}' <<<"$out" | sort -u)
+  check "LAST starts at one column on every row" [ "$(wc -l <<<"$cols")" -eq 1 ]
+  check "the long name is shown whole"           grep -q 'a-twenty-one-chars-xx ' <<<"$out"
   end
 fi
 

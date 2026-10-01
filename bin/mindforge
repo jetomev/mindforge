@@ -297,7 +297,13 @@ full() {
       "$D" "$STATE" "$O"
     queue_missing=1
   else
-  printf '  %-20s %-10s %-42s %s\n' "REPO" "LAST" "NEXT" "STATE"
+  # #40 · a 21-character name in a 20-wide column pushed its whole row one
+  # place right. The column is as wide as the longest name, never under 20;
+  # names are not cut, because a cut name is harder to recognise.
+  local RW; RW=$(queue_lines | awk -F'\t' '/^[#@]/||$1==""{next} {print $1}' \
+    | while IFS= read -r n; do printf '%s\n' "${#n}"; done | sort -n | tail -1)
+  [ "${RW:-0}" -gt 20 ] || RW=20
+  printf '  %s %-10s %-42s %s\n' "$(pad_to "$RW" REPO)" "LAST" "NEXT" "STATE"
   while IFS=$'\t' read -r proj next impact block ref; do
     case "$proj" in \#*|@*|"") continue;; esac   # @ lines are directives, not repos
     : "${ref:-}"                                  # column 5 is R8's business
@@ -323,7 +329,7 @@ full() {
       waits:*)  st="$st ${Y}waits${O}" ;;
       blocks:*) st="$st ${G}clears${O}" ;;
     esac
-    printf '  %s %-10s %s %b\n' "$(pad_to 20 "$proj")" "$last" "$(pad_to 42 "${next:0:42}")" "$st"
+    printf '  %s %-10s %s %b\n' "$(pad_to "$RW" "$proj")" "$last" "$(pad_to 42 "${next:0:42}")" "$st"
   done < <(queue_lines)
   fi
   echo
@@ -638,6 +644,49 @@ rot_checks() {
       printf 'R8\tgh is not on PATH -- no queue entry was checked\n'
   fi
 
+  # R11 · active work the queue does not name (#39).
+  # R6 asks whether each queue line points at something real; R8 whether its
+  # task is still open. Nothing asked whether the queue is COMPLETE. On
+  # 2026-10-01 hypeForge had been worked on for four days -- the whole previous
+  # session was hypeForge -- and the brief did not show it at all, because no
+  # one had added its line. A missing row is not shown as stale; it is simply
+  # not there, and the reader cannot see what they are not being shown.
+  # Any repo under a root with a commit inside the window and no queue line is
+  # named. AUR twins ride on their project's line. `@quiet name ...` is the
+  # deliberate opt-out -- visible in the file, like "-" in column 5.
+  # No queue.md is the first-run path (F-20), not a finding.
+  if [ -r "$STATE/queue.md" ]; then
+    local days="${MINDFORGE_ACTIVE_DAYS:-14}" cutoff covered="" quiet="" proj d g
+    cutoff=$(( $(date +%s) - days * 86400 ))
+    while IFS=$'\t' read -r proj _; do
+      case "$proj" in
+        @quiet*) quiet="$quiet ${proj#@quiet} " ;;
+        \#*|@*|"") ;;
+        *) d=$(proj_dir "$proj") && g=$(governing_repo "$d") && [ -n "$g" ] && \
+             covered="$covered"$'\n'"$g" ;;
+      esac
+    done < <(queue_lines)
+    while IFS= read -r root; do
+      for d in "$root"/*/.git; do
+        [ -d "$d" ] || continue
+        d=${d%/.git}
+        local n t base; n=$(basename "$d")
+        grep -qxF "$d" <<<"$covered" && continue
+        case " $quiet " in *" $n "*) continue ;; esac
+        # aur-<name> and aur-<name>-remote are packaging for <name>.
+        case "$n" in
+          aur-*) base=${n#aur-}; base=${base%-remote}
+                 grep -q "/$base\$" <<<"$covered" && continue ;;
+        esac
+        # Unreadable repos are R3's to report; a second line would be noise.
+        t=$(git -C "$d" log -1 --format=%ct 2>/dev/null) || continue
+        [ -n "$t" ] && [ "$t" -ge "$cutoff" ] || continue
+        printf 'R11\t%s has commits from %s but no line in the queue -- the brief cannot show its next step (add it, or name it on an @quiet line)\n' \
+          "$n" "$(date -d "@$t" +%F 2>/dev/null || echo "the last $days days")"
+      done
+    done < <(proj_roots)
+  fi
+
   # R7 · the index is STALE, not merely incomplete.
   # R4 catches a memory file with no index line at all. It does not catch an
   # index line that contradicts the file it points at -- which is the failure
@@ -807,7 +856,7 @@ session_start() {
   # moment is session start. It had two callers, both typed by a human, so it
   # ran only when someone already suspected a problem: an R7 finding was true
   # all night and reached nobody. Now it runs here, every session.
-  echo "rot check (R1-R9):"
+  echo "rot check (R1-R11):"
   rot
   echo "</session-briefing>"
   cat <<'DIRECTIVE'
