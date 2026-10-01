@@ -15,7 +15,7 @@ cannot be forgotten because it does not depend on remembering.
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
 > nine defects of its own; three are fixed, six are open and listed in the
-> issues. Its **automated test suite** has 146 checks. Every check it makes
+> issues. Its **automated test suite** has 160 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 > true. Still: one user, and we publish early and say so.
 
@@ -233,11 +233,17 @@ decide either way, 2 whose expectation was simply wrong, 1 not applicable. Nine
 of those became the v0.1.3 fixes. The failures are published in `testing/`
 rather than argued into passes.
 
+**Caught by releasing itself:** v0.1.6 went public on the wrong commit for a
+few minutes. The scrub hook refused a commit, and the tag and push, typed on the
+next line, ran anyway. Releases now go through `scripts/release.sh`, which
+refuses before anything is tagged unless the tree is clean, `main` is current,
+the version and changelog match, and the tests pass (#41).
+
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 146 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 160 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
-R11, and the "could not look" path of R3–R6 and R10 — and refuses to report green
+the release script, R11, and the "could not look" path of R3–R6 and R10 — and refuses to report green
 when nothing ran. R1, R2 and much of the full brief are still checked by hand
 against the 115-check matrix.
 

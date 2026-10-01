@@ -2,6 +2,20 @@
 
 Newest first.
 
+## Unreleased
+
+- 🔓 **`scripts/release.sh` (#41).** v0.1.6 went public on the wrong commit: the
+  scrub hook refused the docs commit, and the tag and push on the next line ran
+  anyway. The script refuses, before anything is tagged or pushed, when the
+  version is not X.Y.Z, the tree is not clean, `main` is behind `origin`, the
+  `VERSION` line or the changelog does not match, the tag already exists, or
+  the tests fail. Then it tags (the message is the changelog entry), pushes,
+  and prints the human steps that remain. Logged to `logs/`.
+
+Tests: 160 checks, 160 pass (was 146). The release checks were also run
+against three planted copies of the script, each missing one guard; each was
+caught.
+
 ## v0.1.6 — 2026-10-01
 
 **The queue is checked for what it leaves out.** One morning's brief showed a

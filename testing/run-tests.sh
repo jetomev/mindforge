@@ -606,6 +606,64 @@ if begin "projects table lines up with a long name"; then
   end
 fi
 
+# #41 · scripts/release.sh refuses before anything is tagged or pushed.
+# A throwaway repo shaped like mindForge: bin/mindforge with a VERSION line,
+# a changelog, and a stand-in test suite whose verdict the check controls.
+REL="${MINDFORGE_RELEASE_UNDER_TEST:-$ROOT/scripts/release.sh}"
+rel_repo() {   # rel_repo <version in bin/mindforge> <changelog version> <tests exit>
+  local g=(git -c user.name=t -c user.email=t@t -c init.defaultBranch=main -c core.autocrlf=false)
+  "${g[@]}" init -q --bare "$SB/remotes/rel.git"
+  "${g[@]}" clone -q "$SB/remotes/rel.git" "$SB/rel" 2>/dev/null
+  mkdir -p "$SB/rel/bin" "$SB/rel/docs" "$SB/rel/testing" "$SB/rel/scripts"
+  printf '#!/usr/bin/env bash\nVERSION="%s"\n' "$1" > "$SB/rel/bin/mindforge"
+  printf '# Changelog\n\n## v%s — 2026-10-01\n\nThe entry.\n\n## v0.0.1 — 2026-01-01\n\nOld.\n' "$2" > "$SB/rel/docs/CHANGELOG.md"
+  printf '#!/usr/bin/env bash\necho "3 checks · stand-in"\nexit %s\n' "$3" > "$SB/rel/testing/run-tests.sh"
+  cp "$REL" "$SB/rel/scripts/release.sh"
+  printf 'logs/\n' > "$SB/rel/.gitignore"
+  "${g[@]}" -C "$SB/rel" add -A
+  "${g[@]}" -C "$SB/rel" commit -qm init
+  "${g[@]}" -C "$SB/rel" push -q origin main 2>/dev/null
+}
+rel_run() { env -i PATH="$PATH" HOME="$SB/home" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+  GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t bash "$SB/rel/scripts/release.sh" "$@" 2>&1; }
+no_tag()  { [ -z "$(git -C "$SB/rel" tag)" ] && [ -z "$(git -C "$SB/rel" ls-remote --tags origin)" ]; }
+if begin "release.sh refuses before tagging"; then
+  rel_repo 0.2.0 0.2.0 0
+  out=$(rel_run 0.2)
+  check "a version that is not X.Y.Z is refused"      grep -q 'REFUSED -- give the version as X.Y.Z' <<<"$out"
+  echo stray > "$SB/rel/stray"; out=$(rel_run 0.2.0); rm "$SB/rel/stray"
+  check "an untracked file is refused"                grep -q 'REFUSED -- the working tree' <<<"$out"
+  out=$(rel_run 0.3.0)
+  check "VERSION not matching the release is refused" grep -q 'REFUSED -- bin/mindforge says VERSION="0.2.0", not "0.3.0"' <<<"$out"
+  check "no tag after the refusals so far"            no_tag
+  end
+fi
+if begin "release.sh refuses: changelog, tests, existing tag"; then
+  rel_repo 0.2.0 0.1.9 0
+  check "no changelog entry is refused"               grep -q "REFUSED -- docs/CHANGELOG.md has no '## v0.2.0" <<<"$(rel_run 0.2.0)"
+  end; new_sandbox
+  rel_repo 0.2.0 0.2.0 1
+  out=$(rel_run 0.2.0)
+  check "failing tests are refused"                   grep -q 'REFUSED -- the tests did not pass' <<<"$out"
+  check "no tag after failing tests"                  no_tag
+  end; new_sandbox
+  rel_repo 0.2.0 0.2.0 0
+  git -c user.name=t -c user.email=t@t -C "$SB/rel" tag -a -m pre v0.2.0
+  check "an existing tag is refused"                  grep -q 'REFUSED -- v0.2.0 already exists on this machine' <<<"$(rel_run 0.2.0)"
+  check "setup: the pre-existing tag never reached the remote" [ -z "$(git -C "$SB/rel" ls-remote --tags origin)" ]
+  end
+fi
+if begin "release.sh tags the right commit"; then
+  rel_repo 0.2.0 0.2.0 0
+  out=$(rel_run 0.2.0)
+  check "a good release ends OK"                      [ "$(tail -1 <<<"$out")" = OK ]
+  check "the tag is on origin"                        grep -q 'refs/tags/v0.2.0' <<<"$(git -C "$SB/rel" ls-remote --tags origin)"
+  check "the tagged commit says VERSION 0.2.0"        grep -q '^VERSION="0.2.0"' <<<"$(git -C "$SB/rel" show v0.2.0:bin/mindforge)"
+  check "the tag message is the changelog entry"      bash -c 'git -C "$1" tag -l --format="%(contents)" v0.2.0 | grep -q "The entry." && ! git -C "$1" tag -l --format="%(contents)" v0.2.0 | grep -q Old' _ "$SB/rel"
+  check "the run is logged with a -latest link"       [ -L "$SB/rel/logs/release-latest.log" ]
+  end
+fi
+
 # ================================================================== verdict ==
 REAL_AFTER=$(snap "$REAL_STATE")
 echo

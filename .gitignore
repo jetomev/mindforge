@@ -10,3 +10,6 @@ scrub.local
 # Python bytecode from testing/tally-matrix.py
 __pycache__/
 *.pyc
+
+# Release logs (scripts/release.sh)
+logs/

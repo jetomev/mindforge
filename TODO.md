@@ -1,7 +1,7 @@
 # mindForge — the list
 
-**Current release: v0.1.6** (1 Oct 2026) — the queue is checked for what it leaves out. Nothing unreleased.
-**Tests:** `bash testing/run-tests.sh`, 146 checks, all passing (1 Oct 2026).
+**Current release: v0.1.6** (1 Oct 2026) — the queue is checked for what it leaves out. **Unreleased:** `scripts/release.sh` (#41).
+**Tests:** `bash testing/run-tests.sh`, 160 checks, all passing (1 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -40,7 +40,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **R11's first real finding, for the maintainer:** `homelab` (commits 28 Sep) has no queue line. Add it with its next step, or put it on an `@quiet` line
 
 ## Release incident, v0.1.6 (2026-10-01)
-- [ ] **A refused commit was followed by a tag and a push anyway.** The scrub hook refused the docs commit (correctly); the tag + push sat on the next line of the same command, which a heredoc ends, so `&&` did not reach them. v0.1.6 went public on the code commit (VERSION still 0.1.5) for a few minutes; deleted and re-tagged with the maintainer's OK, before any release page. **Design fix proposed:** a `scripts/release.sh <version>` that runs under `set -e`, refuses a dirty tree, checks that `VERSION` in bin/mindforge equals the tag before tagging, runs the tests, then tags and pushes. A wrong tag becomes impossible, not merely unlikely. Waiting on the maintainer
+- [x] A refused commit was followed by a tag and a push anyway (the tag + push sat on the line after a heredoc). v0.1.6 public on the wrong commit for minutes; re-tagged with the maintainer's OK. **Fixed by design: `scripts/release.sh` (#41)**, which refuses before tagging unless tree clean, main current, VERSION + changelog match, tag new, tests pass. 14 checks; three planted broken copies each caught
 
 ## After the work laptop pulls
 - [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.6), then `bash testing/run-tests.sh` there too. Expect 146 checks, and the brief says at once whether the hooks are in place.
