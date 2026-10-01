@@ -39,5 +39,8 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] ~~A queue name longer than 20 characters pushes its row out of line~~ **Fixed in v0.1.6 (#40)**
 - [ ] **R11's first real finding, for the maintainer:** `homelab` (commits 28 Sep) has no queue line. Add it with its next step, or put it on an `@quiet` line
 
+## Release incident, v0.1.6 (2026-10-01)
+- [ ] **A refused commit was followed by a tag and a push anyway.** The scrub hook refused the docs commit (correctly); the tag + push sat on the next line of the same command, which a heredoc ends, so `&&` did not reach them. v0.1.6 went public on the code commit (VERSION still 0.1.5) for a few minutes; deleted and re-tagged with the maintainer's OK, before any release page. **Design fix proposed:** a `scripts/release.sh <version>` that runs under `set -e`, refuses a dirty tree, checks that `VERSION` in bin/mindforge equals the tag before tagging, runs the tests, then tags and pushes. A wrong tag becomes impossible, not merely unlikely. Waiting on the maintainer
+
 ## After the work laptop pulls
 - [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.6), then `bash testing/run-tests.sh` there too. Expect 146 checks, and the brief says at once whether the hooks are in place.
