@@ -2,6 +2,32 @@
 
 Newest first.
 
+## v0.1.6 — 2026-10-01
+
+**The queue is checked for what it leaves out.** One morning's brief showed a
+table two days stale and a rot check with nothing to say. v0.1.5 fails **4 of
+this release's 146 checks**: the three new ones below, and the heading that
+now reads "rot check (R1-R11)".
+
+- 🚨 **R11 · active work the queue does not name (#39).** hypeForge had been
+  worked on for four days, the previous session was entirely hypeForge, and
+  the brief did not show it at all: nobody had added its line. R6 asked whether
+  each line points at something real, R8 whether its task is still open;
+  nothing asked whether the list was complete. R11 names any repo with commits
+  in the last 14 days (`MINDFORGE_ACTIVE_DAYS`) and no queue line. AUR twins
+  ride on their project's line. A repo deliberately left out goes on a new
+  `@quiet` line, so the opt-out is visible in the file. Its first real run
+  named a true finding: `homelab`. Same shape as #28 and #37 — a hand-written
+  record that nothing checks — and it closes the "Known gaps" line that said
+  so.
+- **The projects table lines up with long names (#40).** A 21-character
+  project name in a 20-wide column pushed its whole row one place right. The
+  column now sizes to the longest name; names are never cut.
+
+Tests: 146 checks, 146 pass (was 134; +12, none removed). Each new check was
+also run against v0.1.5: the R11 and alignment checks fail there, as they
+must. Warnings: no shell linter installed; not counted. `bash -n` is clean.
+
 ## v0.1.5 — 2026-09-29
 
 **Nothing silent.** Four fixes, one idea: a check that did not run, could not

@@ -10,12 +10,12 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.5, one month old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.6, one month old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
 > nine defects of its own; three are fixed, six are open and listed in the
-> issues. Its **automated test suite** has 134 checks. Every check it makes
+> issues. Its **automated test suite** has 146 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 > true. Still: one user, and we publish early and say so.
 
@@ -129,6 +129,7 @@ every brief:
 | R8 | the queue pointing at an issue that is already closed — checked against GitHub |
 | R9 | a memory index too big to load in full, which fails with no message at all |
 | R10 | the session hooks missing or switched off — without them nothing above runs by itself |
+| R11 | a project with recent commits but no line in the queue — so the brief cannot show it at all |
 
 ---
 
@@ -234,9 +235,9 @@ rather than argued into passes.
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 134 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 146 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
-and the "could not look" path of R3–R6 and R10 — and refuses to report green
+R11, and the "could not look" path of R3–R6 and R10 — and refuses to report green
 when nothing ran. R1, R2 and much of the full brief are still checked by hand
 against the 115-check matrix.
 

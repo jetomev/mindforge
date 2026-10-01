@@ -1,7 +1,7 @@
 # mindForge — the list
 
-**Current release: v0.1.5** (29 Sep 2026) — nothing silent. Nothing unreleased.
-**Tests:** `bash testing/run-tests.sh`, 134 checks, all passing (29 Sep 2026).
+**Current release: v0.1.6** (1 Oct 2026) — the queue is checked for what it leaves out. Nothing unreleased.
+**Tests:** `bash testing/run-tests.sh`, 146 checks, all passing (1 Oct 2026).
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -35,7 +35,9 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **One GitHub issue per finding from the v0.1.2/v0.1.3 test round** — deliberately held back; still on hold.
 
 ## Known gaps (no issue yet)
-- [ ] The rot checks only look at projects the queue names. A project nobody adds to the queue is never checked.
+- [x] ~~The rot checks only look at projects the queue names.~~ **Closed by R11 in v0.1.6 (#39):** a repo with commits in the last 14 days and no queue line is named; `@quiet` is the visible opt-out. Found when the queue sat untouched from 29 Sep to 1 Oct and hypeForge, worked on all four days, never appeared in the brief
+- [x] ~~A queue name longer than 20 characters pushes its row out of line~~ **Fixed in v0.1.6 (#40)**
+- [ ] **R11's first real finding, for the maintainer:** `homelab` (commits 28 Sep) has no queue line. Add it with its next step, or put it on an `@quiet` line
 
 ## After the work laptop pulls
-- [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.5), then `bash testing/run-tests.sh` there too. Expect 134 checks, and the brief says at once whether the hooks are in place.
+- [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.6), then `bash testing/run-tests.sh` there too. Expect 146 checks, and the brief says at once whether the hooks are in place.

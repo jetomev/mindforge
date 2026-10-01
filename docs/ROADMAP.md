@@ -4,7 +4,7 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **Extend the test suite to R1, R2 and the full brief.** 134 checks cover
+- [ ] **Extend the test suite to R1, R2 and the full brief.** 146 checks cover
       the closeout, the queue, session start, the headline, the scrub hook and
       the could-not-look paths. R1, R2 and most of the full brief are still
       verified by hand against the 115-check matrix.
@@ -35,6 +35,11 @@ Newest first; Future at the top.
       the known "L1 does not load itself" weakness structurally; publish a
       short threat model, as ctx does even for a local-only tool. A deeper
       read decides which of these become issues.
+
+## v0.1.6 — 2026-10-01
+
+- [x] R11 — a project with recent work but no queue line; `@quiet` opt-out (#39)
+- [x] The projects table lines up whatever the length of a name (#40)
 
 ## v0.1.5 — 2026-09-29
 
