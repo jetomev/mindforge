@@ -19,6 +19,11 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **#21** · The PowerShell wrapper breaks quoted text, so `wrap` and `drift` record the wrong thing.
 - [ ] **#34** · The same project is counted twice on Windows because of two spellings of the drive path.
 
+- [ ] **#43** · W-11 (filed from the laptop 2026-10-05 after it pulled v0.1.6): R11 names every queued project as missing there (junctions to Dropbox folders, same family as #34), and the eleven `release.sh` checks fail without saying why. Suite there: 160 checks, 145 pass. To fix here.
+
+### 1b · Asked by the maintainer (2026-10-06)
+- [ ] **#44** · `mindforge <project>` — the brief, reduced to one project or initiative (header, phase table + NEXT items with comments, its queue and rot lines, a recommendation). Today the command prints the usage text.
+
 ### 2 · Lessons about the method (mostly writing, some design)
 - [ ] **#23** · The scoped persona leaked a third time, through the vault, which the commit check cannot reach.
 - [ ] **#25** · A warning written in a decision document does not reach the script that needs it.
@@ -46,4 +51,4 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] A refused commit was followed by a tag and a push anyway (the tag + push sat on the line after a heredoc). v0.1.6 public on the wrong commit for minutes; re-tagged with the maintainer's OK. **Fixed by design: `scripts/release.sh` (#41)**, which refuses before tagging unless tree clean, main current, VERSION + changelog match, tag new, tests pass. 14 checks; three planted broken copies each caught
 
 ## After the work laptop pulls
-- [ ] On the laptop: `git pull --rebase origin main` (brings v0.1.6), then `bash testing/run-tests.sh` there too. Expect 146 checks, and the brief says at once whether the hooks are in place.
+- [x] On the laptop: `git pull --rebase origin main` (brings v0.1.6), then `bash testing/run-tests.sh` there too. **Done 2026-10-05** (fast-forward to `832685d`): 160 checks, 145 pass; the 15 failures and the R11 false alarms are **#43**
