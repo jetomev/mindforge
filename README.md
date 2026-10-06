@@ -81,6 +81,8 @@ One command per turn - intro, command, expected result, then stop.
 | `mindforge drift "<what slipped>"` | log a drift observation with a timestamp |
 | `mindforge rot` | the silent-failure checks, on their own |
 | `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
+| `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. First hit: the reply goes back for a rewrite and you see the alert; second pass: alert only. `--check` reads a file instead |
+| `mindforge chime [--test]` | **a sound when the assistant is done and waiting** (0.1.7), so you hear it from the next room. From the Stop and Notification hooks; silent when there is no player or sound file |
 
 Two files hold your rules, and the difference is the whole point:
 
@@ -168,8 +170,28 @@ To wire the hooks, add to `~/.claude/settings.json`:
     ],
     "SessionEnd": [
       { "hooks": [{ "type": "command", "command": "mindforge session-end" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "mindforge tone" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "mindforge chime" }] }
     ] } }
 ```
+
+`Stop` and `Notification` are the 0.1.7 pair: the tie alert and the chime. Both are optional; the brief does not count them as missing.
+
+### The tie alert — why a hook and not a rule
+
+The tone rule ("talk like I talk, not like a memo") was one line among thirty in
+the working agreement, loaded every session — and it lost, every long turn, to
+the assistant's own built-in report style, which is re-applied by the app on
+every reply. A reminder cannot beat a house style. So the rule became a check
+that fires on screen: when a reply carries a section header, a form label or a
+status-report opener, the person sees "tie alert: …" and the assistant gets the
+reply back to rewrite, once. Extra patterns go in `~/.config/mindforge/tone.local`,
+one regular expression per line. The same shape as the handoff: drift is
+something both can see, not something one has to catch.
 
 The `compact` entry re-injects your working agreement after context compaction —
 the moment standing rules are most likely to be flattened away.
@@ -241,9 +263,9 @@ the version and changelog match, and the tests pass (#41).
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 160 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 180 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
-the release script, R11, and the "could not look" path of R3–R6 and R10 — and refuses to report green
+the release script, R11, the tie alert, the chime, and the "could not look" path of R3–R6 and R10 — and refuses to report green
 when nothing ran. R1, R2 and much of the full brief are still checked by hand
 against the 115-check matrix.
 

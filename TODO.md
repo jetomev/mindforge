@@ -1,7 +1,7 @@
 # mindForge — the list
 
-**Current release: v0.1.6** (1 Oct 2026) — the queue is checked for what it leaves out. **Unreleased:** `scripts/release.sh` (#41).
-**Tests:** `bash testing/run-tests.sh`, 160 checks, all passing (1 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
+**Current release: v0.1.7** (6 Oct 2026) — the tie alert and the chime (#45), and `scripts/release.sh` (#41).
+**Tests:** `bash testing/run-tests.sh`, 180 checks, all passing (6 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -22,6 +22,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **#43** · W-11 (filed from the laptop 2026-10-05 after it pulled v0.1.6): R11 names every queued project as missing there (junctions to Dropbox folders, same family as #34), and the eleven `release.sh` checks fail without saying why. Suite there: 160 checks, 145 pass. To fix here.
 
 ### 1b · Asked by the maintainer (2026-10-06)
+- [x] **#45** · `mindforge tone` (the tie alert, a Stop hook) and `mindforge chime` — shipped in v0.1.7 the same day. Design fix, not a reminder: the tone rule had lost to the app's built-in report style all afternoon
 - [ ] **#44** · `mindforge <project>` — the brief, reduced to one project or initiative (header, phase table + NEXT items with comments, its queue and rot lines, a recommendation). Today the command prints the usage text.
 
 ### 2 · Lessons about the method (mostly writing, some design)

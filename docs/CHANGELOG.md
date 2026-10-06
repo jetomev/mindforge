@@ -2,8 +2,21 @@
 
 Newest first.
 
-## Unreleased
+## v0.1.7 — 2026-10-06
 
+- 👔 **`mindforge tone` — the tie alert (#45).** The tone rule lost, every long
+  turn, to the assistant's built-in report style; a reminder cannot beat a house
+  style. Now a Stop hook reads the last reply from the transcript and flags
+  memo-speak (section headers, "Expected result:", status-report openers, local
+  patterns from `tone.local`). First hit: the reply goes back for a rewrite and
+  the person sees "tie alert"; second pass: alert only, never a loop. Code blocks
+  are not read; a tool result does not reset the reply; no transcript, bad input
+  or no python: silence.
+- 🔔 **`mindforge chime` (#45).** "When you finish and are waiting for me, make a
+  chime sound, so if I am away I can hear it." A sound from the Stop hook (after
+  a reply goes through) and the Notification hook. Player and file found on the
+  machine or set in the config (`MINDFORGE_CHIME`, `MINDFORGE_CHIME_PLAYER`);
+  silent, never failing, without them.
 - 🔓 **`scripts/release.sh` (#41).** v0.1.6 went public on the wrong commit: the
   scrub hook refused the docs commit, and the tag and push on the next line ran
   anyway. The script refuses, before anything is tagged or pushed, when the
@@ -12,7 +25,8 @@ Newest first.
   the tests fail. Then it tags (the message is the changelog entry), pushes,
   and prints the human steps that remain. Logged to `logs/`.
 
-Tests: 160 checks, 160 pass (was 146). The release checks were also run
+Tests: 180 checks, 180 pass (was 146): the tie alert and the chime are 20 of them,
+each fed a known-bad input as well as a good one. The release checks were also run
 against three planted copies of the script, each missing one guard; each was
 caught.
 
