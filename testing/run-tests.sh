@@ -51,6 +51,7 @@ mf() {
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="$SB/projects" \
     MINDFORGE_MEMORY="$SB/mem" CLAUDE_CODE_SESSION_ID="$SID" \
     SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
+    MINDFORGE_CHIME="${MINDFORGE_CHIME:-/nonexistent-chime}" MINDFORGE_CHIME_PLAYER="${MINDFORGE_CHIME_PLAYER:-}" \
     bash "$MF" "$@"
 }
 
@@ -661,6 +662,79 @@ if begin "release.sh tags the right commit"; then
   check "the tagged commit says VERSION 0.2.0"        grep -q '^VERSION="0.2.0"' <<<"$(git -C "$SB/rel" show v0.2.0:bin/mindforge)"
   check "the tag message is the changelog entry"      bash -c 'git -C "$1" tag -l --format="%(contents)" v0.2.0 | grep -q "The entry." && ! git -C "$1" tag -l --format="%(contents)" v0.2.0 | grep -q Old' _ "$SB/rel"
   check "the run is logged with a -latest link"       [ -L "$SB/rel/logs/release-latest.log" ]
+  end
+fi
+
+# ---------------------------------------------------------------- tone (0.1.7)
+# The tie alert: a Stop hook that reads the assistant's last reply from the
+# transcript. Fed a memo and a clean reply; the memo must be caught, the clean
+# one must pass, a tool result must not reset the reply, the second pass must
+# not block, and a missing transcript must be silent.
+fake_transcript() {   # fake_transcript <file> <reply text...>  (one user turn, then the reply)
+  local f="$1"; shift
+  python3 - "$f" "$*" <<'PY'
+import json, sys
+f, reply = sys.argv[1], sys.argv[2]
+rows = [
+  {"type": "assistant", "message": {"content": [{"type": "text", "text": "## Old heading from an earlier reply"}]}},
+  {"type": "user", "message": {"content": "the person speaks"}},
+  {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]}},
+  {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "## a header inside a tool result"}]}},
+  {"type": "assistant", "message": {"content": [{"type": "text", "text": reply}]}},
+]
+open(f, "w").write("\n".join(json.dumps(r) for r in rows) + "\n")
+PY
+}
+hook_json() { printf '{"session_id":"%s","transcript_path":"%s","hook_event_name":"Stop","stop_hook_active":%s}' "$SID" "$1" "${2:-false}"; }
+
+if begin "tone --check"; then
+  printf '## Heading\n\nExpected result: a line.\n\n```\n## inside code is fine\n```\n' > "$SB/memo.md"
+  printf 'Okay, done. You should see a line ending in OK.\n\n```\nExpected result: inside code\n```\n' > "$SB/clean.md"
+  out=$(mf tone --check "$SB/memo.md"); rc=$?
+  check "a memo is caught (exit 1)"              [ "$rc" -eq 1 ]
+  check "names the header"                       grep -q 'a section header' <<<"$out"
+  check "names the form label"                   grep -q "Expected result" <<<"$out"
+  out=$(mf tone --check "$SB/clean.md"); rc=$?
+  check "a clean reply passes (exit 0)"          [ "$rc" -eq 0 ]
+  check "code blocks are not read"               [ -z "$out" ]
+  end
+fi
+
+if begin "tone as the Stop hook"; then
+  fake_transcript "$SB/t.jsonl" "Here's where it all stands. **Staged and verified**"
+  out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
+  check "first pass blocks the reply"            grep -q '"decision": *"block"' <<<"$out"
+  check "the reason says why"                    grep -q 'status-report opener' <<<"$out"
+  check "the person sees the alert"              grep -q '"systemMessage": *"tie alert' <<<"$out"
+  check "exit 0 (the JSON is the answer)"        [ "$rc" -eq 0 ]
+  check "the hit is logged"                      grep -q 'status-report opener' "$SB/state/tone.log"
+  out=$(hook_json "$SB/t.jsonl" true | mf tone)
+  check "second pass never blocks"               bash -c '! grep -q block <<<"$1"' _ "$out"
+  check "second pass still alerts"               grep -q 'second pass' <<<"$out"
+  fake_transcript "$SB/c.jsonl" "Nice, that worked. Run the next one and paste me the last line."
+  out=$(hook_json "$SB/c.jsonl" | mf tone); rc=$?
+  check "a clean reply: silence, exit 0"         [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "an earlier reply's header is not counted" true
+  out=$(hook_json "$SB/nowhere.jsonl" | mf tone); rc=$?
+  check "no transcript: silence, exit 0"         [ -z "$out" ] && [ "$rc" -eq 0 ]
+  out=$(printf 'not json' | mf tone); rc=$?
+  check "bad input: silence, exit 0"             [ -z "$out" ] && [ "$rc" -eq 0 ]
+  mkdir -p "$SB/home/.config/mindforge"; printf '# comment\nhell yeah\n' > "$SB/home/.config/mindforge/tone.local"
+  fake_transcript "$SB/l.jsonl" "hell yeah it worked"
+  out=$(hook_json "$SB/l.jsonl" | mf tone)
+  check "a local pattern is honoured"            grep -q 'a local pattern' <<<"$out"
+  end
+fi
+
+if begin "chime"; then
+  : > "$SB/bin/paplay"; chmod +x "$SB/bin/paplay"     # a player that does nothing
+  printf 'x' > "$SB/ding.oga"
+  out=$(MINDFORGE_CHIME="$SB/ding.oga" mf chime --test)
+  check "names the player and the file"          grep -q "chime: paplay $SB/ding.oga" <<<"$out"
+  out=$(MINDFORGE_CHIME="$SB/nowhere.oga" mf chime --test); rc=$?
+  check "a missing file: says so, exit 0"        grep -q 'no sound file' <<<"$out" && [ "$rc" -eq 0 ]
+  out=$(MINDFORGE_CHIME="$SB/ding.oga" MINDFORGE_CHIME_PLAYER=no-such-player mf chime); rc=$?
+  check "plain chime never fails"                [ "$rc" -eq 0 ] && [ -z "$out" ]
   end
 fi
 

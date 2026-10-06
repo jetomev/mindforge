@@ -9,7 +9,7 @@ set -uo pipefail
 # ~/.config/mindforge/config is local and gitignored; see config.example.
 [ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
 
-VERSION="0.1.6"
+VERSION="0.1.7"
 STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
 PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"   # colon-separated, PATH-style
 # Claude Code encodes the working directory into the memory path: / becomes -
@@ -1212,6 +1212,154 @@ drift() {
   printf '%slogged.%s %s drift note(s) so far.\n' "$Y" "$O" "$(grep -c . "$STATE/drift.log")"
 }
 
+# ── tone · the tie alert (0.1.7) ─────────────────────────────────────────────
+# A Stop hook: when the assistant finishes a reply, its last message is read
+# from the transcript and searched for memo-speak -- section headers, form
+# labels ("Expected result:"), status-report openers. Why a hook and not a
+# rule: the tone rule was one line among thirty and lost, every long turn, to
+# the app's own built-in report style. A reminder cannot beat a house style;
+# a check that fires on screen can. First hit: the reply is sent back to the
+# assistant to rewrite (decision: block) and the person sees the alert. Second
+# pass (stop_hook_active): alert only, never a loop.
+#   mindforge tone                 (the hook; reads the hook's JSON on stdin)
+#   mindforge tone --check <file>  print the tells in a text file; exit 1 if any
+#   ~/.config/mindforge/tone.local: extra patterns, one regex per line (optional)
+tone() {
+  command -v python3 >/dev/null 2>&1 || { chime; exit 0; }   # no python: never block a reply
+  local mode="${1:-}" file="${2:-}" code
+  # the code goes in through -c, so stdin stays what the hook sent
+  code=$(cat <<'PY'
+import json, os, re, sys, datetime
+mode, path, state, local = sys.argv[1:5]
+TELLS = [
+    (r"^#{1,4} \S", "a section header"),
+    (r"^\*\*[^*\n]{3,70}\*\*:?\s*$", "a bold line used as a heading"),
+    (r"\bExpected result\b|^\s*Expected:", "'Expected result'"),
+    (r"^\s*(Status|Summary|Recap|Next steps|Findings|Outcome)\s*:", "a form label"),
+    (r"\bwhere (it all|things|we) stands?\b", "a status-report opener"),
+    (r"\bIn summary\b|\bTo summarize\b|\bIn conclusion\b", "a wrap-up phrase"),
+]
+if os.path.isfile(local):
+    for line in open(local, encoding="utf-8"):
+        line = line.rstrip("\n")
+        if line and not line.startswith("#"):
+            TELLS.append((line, "a local pattern"))
+
+def strip_code(text):
+    return re.sub(r"```.*?```", "", text, flags=re.S)
+
+def tells_in(text):
+    text = strip_code(text)
+    found = []
+    for pat, name in TELLS:
+        try:
+            if re.search(pat, text, flags=re.M):
+                found.append(name)
+        except re.error:
+            pass
+    return found
+
+def last_reply(transcript):
+    buf = []
+    with open(transcript, encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                continue
+            t = row.get("type")
+            msg = row.get("message") or {}
+            content = msg.get("content")
+            if t == "user":
+                # a tool result is not the person speaking
+                if isinstance(content, list) and content and all(
+                        isinstance(c, dict) and c.get("type") == "tool_result" for c in content):
+                    continue
+                buf = []
+            elif t == "assistant" and isinstance(content, list):
+                for c in content:
+                    if isinstance(c, dict) and c.get("type") == "text":
+                        buf.append(c.get("text", ""))
+    return "\n".join(buf)
+
+if mode == "--check":
+    found = tells_in(open(path, encoding="utf-8").read()) if path else []
+    for f in found:
+        print(f)
+    sys.exit(1 if found else 0)
+
+try:
+    hook = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+transcript = hook.get("transcript_path") or ""
+if not os.path.isfile(transcript):
+    sys.exit(0)
+found = tells_in(last_reply(transcript))
+if not found:
+    sys.exit(0)
+tells = ", ".join(dict.fromkeys(found))
+try:
+    with open(os.path.join(state, "tone.log"), "a", encoding="utf-8") as f:
+        f.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M}\t{tells}\n")
+except OSError:
+    pass
+alert = f"tie alert: {tells}"
+if hook.get("stop_hook_active"):
+    print(json.dumps({"systemMessage": alert + " (second pass, letting it through)"}))
+else:
+    print(json.dumps({
+        "decision": "block",
+        "reason": ("mindforge tone: " + alert + ". The reply reads like a memo. Rewrite it the "
+                   "way the person talks: no headers, no form labels, say it in sentences; "
+                   "keep every fact and every command."),
+        "systemMessage": alert,
+    }))
+sys.exit(3)   # 3 = blocked: the chime waits for the rewrite
+PY
+)
+  python3 -c "$code" "$mode" "$file" "$STATE" "$HOME/.config/mindforge/tone.local"
+  local rc=$?
+  [ "$mode" = "--check" ] && return "$rc"
+  [ "$rc" -eq 3 ] && return 0     # blocked: no chime yet, the reply comes back
+  chime                           # the reply went through: the person is waited on
+  return 0
+}
+
+# ── chime · a sound when the assistant is done and waiting (0.1.7) ───────────
+# The maintainer (2026-10-06): "when you finish and are waiting for me... make a chime
+# sound, so if I am away, I can hear it." Runs from the Stop hook (through
+# tone) and from the Notification hook. Silent, never failing, when there is
+# no player or no sound file -- a hook must not break a reply. The sound and
+# the player come from config: MINDFORGE_CHIME (a file), MINDFORGE_CHIME_PLAYER.
+#   mindforge chime          play it
+#   mindforge chime --test   say what would play, and play it
+chime() {
+  local file="${MINDFORGE_CHIME:-}" player="${MINDFORGE_CHIME_PLAYER:-}" f
+  if [ -z "$file" ]; then
+    for f in /usr/share/sounds/freedesktop/stereo/complete.oga              /usr/share/sounds/freedesktop/stereo/message-new-instant.oga; do
+      [ -r "$f" ] && { file="$f"; break; }
+    done
+  fi
+  if [ -z "$player" ]; then
+    for f in paplay pw-play canberra-gtk-play aplay afplay; do
+      command -v "$f" >/dev/null 2>&1 && { player="$f"; break; }
+    done
+  fi
+  if [ "${1:-}" = "--test" ]; then
+    [ -z "$file" ] || [ ! -r "$file" ] && { echo "chime: no sound file (set MINDFORGE_CHIME in the config)"; return 0; }
+    [ -z "$player" ] && { echo "chime: no player found (paplay, pw-play, canberra-gtk-play, aplay)"; return 0; }
+    echo "chime: $player $file"
+  fi
+  [ -z "$file" ] || [ ! -r "$file" ] || [ -z "$player" ] && return 0
+  if [ "$player" = "canberra-gtk-play" ]; then
+    ( timeout 5 "$player" -f "$file" >/dev/null 2>&1 & )
+  else
+    ( timeout 5 "$player" "$file" >/dev/null 2>&1 & )
+  fi
+  return 0
+}
+
 usage() {
   cat <<'USAGE'
 usage:
@@ -1225,6 +1373,8 @@ usage:
   mindforge drift "<what slipped>"       log a drift observation
   mindforge log [--drop-last]            recent rows / remove the last (backup kept)
   mindforge rot                          the silent-failure checks
+  mindforge tone [--check <file>]        the tie alert (a Stop hook; --check reads a file)
+  mindforge chime [--test]               a sound when the assistant is done and waiting
   mindforge session-start|session-end    (called by hooks)
   mindforge --version
 A note that starts with "-" goes after --, e.g. mindforge drift -- "-x ignored"
@@ -1241,6 +1391,8 @@ case "${1:-brief}" in
   brief) [ "${2:-}" = "--headline" ] && headline || full ;;
   wip)           shift; wip "$@" ;;
   rot)           rot ;;
+  tone)          shift; tone "$@" ;;
+  chime)         shift; chime "$@" ;;
   session-start) session_start ;;
   session-end)   session_end ;;
   wrap)          shift; wrap "$@" ;;
