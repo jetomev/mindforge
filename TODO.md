@@ -31,6 +31,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway.
 - [ ] **#28** · The one-slot handoff note is maintained by nothing — the same failure as the old queue file.
 - [ ] **#37** · S-10: the active-project banner is maintained by nothing — it announced DecadeDrop at the start of a hypeForge session (found 2026-09-29).
+- [ ] **#47** · R8 cannot see stale queue rows: 8 of 18 rows opt out with `-` and are never checked again, and a row whose reference is still open passes even when its sentence lists finished work (found 2026-10-08: forgekit said 0.8.0, hypeForge listed done jobs). Ideas: compare a row's "X.Y.Z shipped" with the newest tag; `wrap` asks "still true?" for every project touched.
 - [ ] **#30** · A relayed handoff carried one machine's way of working to another.
 - [ ] **#31** · The test-matrix advice about sandboxes behaves differently on every machine.
 
