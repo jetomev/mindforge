@@ -8,6 +8,17 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ---
 
+## Big next version — v0.2.0 "one brain on every machine, for every AI" (#61)
+**Not now.** The maintainer's order (2026-10-08): KognogOS + hypeForge first, then DecadeDrop. The folder cleanup comes "soon"; the rest follows. Joined with ai-collab #3. Born from a 29-page research handoff (kept privately) and the 10-08 discussion; the full design is in #61.
+Decided: Option 1 (one Claude only on a server) is out as the place we work · live sync, not git, for the brain · bring your own sync app, mindForge makes it safe · share 100%, machine rules labeled · cover the gaps Anthropic leaves, do not rebuild what exists · built for strangers too (Windows is the gate, macOS untested, nothing of ours hardcoded).
+- [ ] **#60** · The brain's folder layout (first; the maintainer's home folder cleanup is the first case, approved before anything moves).
+- [ ] **#55** · Two sessions at once hide each other: one log and one handoff per machine and per project.
+- [ ] **#56** · Make any sync app safe: conflict copies, a brain that is behind, build junk.
+- [ ] **#57** · Rules name their machine ("this desktop" means another computer once shared).
+- [ ] **#58** · Readable by any AI: a doorway file per tool; others write only to an inbox (ai-collab #3).
+- [ ] **#59** · The third brain: an always-on assistant that proposes, never edits.
+- Open: where the hub lives (home server preferred over the internet-facing one), whether the work laptop joins and with what slice, which sync app.
+
 ## Next up — in this order
 
 ### 1 · Windows support (the work laptop)
