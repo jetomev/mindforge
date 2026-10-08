@@ -17,6 +17,7 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 - [ ] **#57** · Rules name their machine ("this desktop" means another computer once shared).
 - [ ] **#58** · Readable by any AI: a doorway file per tool; others write only to an inbox (ai-collab #3).
 - [ ] **#59** · The third brain: an always-on assistant that proposes, never edits.
+- [ ] **#62** · Found the same night: the scrub guard sees commits only; issues, comments and release notes go out unchecked (seven issues had to be deleted and recreated). Fix before v0.2.0 makes the brain public-facing.
 - Open: where the hub lives (home server preferred over the internet-facing one), whether the work laptop joins and with what slice, which sync app.
 
 ## Next up — in this order
