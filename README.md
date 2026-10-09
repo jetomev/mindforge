@@ -139,6 +139,8 @@ every brief:
 
 ## Install
 
+From the AUR (since 2026-10-09): `yay -S mindforge`. The command lands in `/usr/bin/mindforge` and the starting files (templates and examples) in `/usr/share/mindforge/`, so the copies below come from there instead of a clone. Or from the source:
+
 ```bash
 git clone https://github.com/jetomev/mindforge.git ~/Programs/mindforge
 ln -s ~/Programs/mindforge/bin/mindforge ~/.local/bin/mindforge
