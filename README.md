@@ -2,6 +2,8 @@
 
 **A working agreement between you and your AI assistant that does not decay.**
 
+> 🖥 **Where it runs:** **any Linux distribution, and Windows through Git Bash** · **no desktop needed**: a terminal tool (bash) · a plain text console should work, not tested yet.
+
 If you work with an AI assistant on real projects over months, two things go
 wrong. It forgets *how you work* between sessions, and it drifts *within* long
 ones. mindForge fixes both structurally — with tiers that decide what is always
@@ -10,12 +12,12 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.6, one month old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.7, one month old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
 > nine defects of its own; three are fixed, six are open and listed in the
-> issues. Its **automated test suite** has 160 checks. Every check it makes
+> issues. Its **automated test suite** has 180 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 > true. Still: one user, and we publish early and say so.
 
