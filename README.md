@@ -139,6 +139,8 @@ every brief:
 
 ## Install
 
+**Everything it needs** to build, run and test, with why, is in [docs/PACKAGING.md](docs/PACKAGING.md), measured from the code (the Forge Suite's [dependency audit](https://github.com/jetomev/forge-suite/issues/91), 2026-10-11).
+
 From the AUR (since 2026-10-09): `yay -S mindforge`. The command lands in `/usr/bin/mindforge` and the starting files (templates and examples) in `/usr/share/mindforge/`, so the copies below come from there instead of a clone. Or from the source:
 
 ```bash
