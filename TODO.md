@@ -8,6 +8,9 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ---
 
+## 2026-10-11 · What it needs, measured
+- [x] **What it needs, measured** (2026-10-11, the Forge Suite audit): `docs/PACKAGING.md`; the AUR recipe 0.1.7-1 builds clean in a clean Arch system (180 checks) and matches the code
+
 ## Done 2026-10-09
 - [x] **On the AUR, 2026-10-09:** signed files added to the v0.1.7 release; `mindforge` 0.1.7-1 built locally (180/180 checks in check()), installed and tested, then pushed; starting files in `/usr/share/mindforge`; the AUR description says where it runs
 
