@@ -15,7 +15,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **#37** · S-10: `mindforge active` replaces the personal hook; `wrap` moves the pointer; a disagreement with the last wrapped session is said on screen. This desktop's hook rewired, the 09-23 pointer file moved into the state folder
 - [x] The harness prints the first lines a failing check saw (the laptop's #43 report had nothing to reason from)
 - [x] **Release:** the maintainer's live test passed (banner + rot check), `release.sh 0.1.8` tagged `84521d4`, GitHub Release Latest with the signed tarball, five issues closed, topics `aur` + `aur-package` added
-- [ ] **AUR 0.1.8-1:** recipe bumped and committed locally (`d241414`), built locally (210 checks in check()), clean-chroot build in the VM; the push waits for the maintainer's install test
+- [ ] **AUR 0.1.8-1:** recipe bumped and committed locally (`d241414`), built locally AND in a clean chroot (210 checks in check() both times); the push waits for the maintainer's install test. Found on the way: python should be a checkdepends (issue filed); the KognogOS os-release hook errors inside any chroot (KognogOS #16)
 
 ## 2026-10-11 · What it needs, measured
 - [x] **What it needs, measured** (2026-10-11, the Forge Suite audit): `docs/PACKAGING.md`; the AUR recipe 0.1.7-1 builds clean in a clean Arch system (180 checks) and matches the code
