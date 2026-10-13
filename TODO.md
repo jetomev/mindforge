@@ -1,6 +1,6 @@
 # mindForge — the list
 
-**Current release: v0.1.8** (12 Oct 2026) — the 0.1.8 batch: #63, #43 (+#34), #42, #37. GitHub Release Latest with signed files; AUR 0.1.8-1 built, push waits for the maintainer's install test.
+**Current release: v0.1.8** (12 Oct 2026) — the 0.1.8 batch: #63, #43 (+#34), #42, #37. GitHub Release Latest with signed files; AUR `mindforge` 0.1.8-1 pushed (`d241414`) after the maintainer's local install test.
 **Tests:** `bash testing/run-tests.sh`, 210 checks, all passing (12 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
@@ -15,7 +15,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **#37** · S-10: `mindforge active` replaces the personal hook; `wrap` moves the pointer; a disagreement with the last wrapped session is said on screen. This desktop's hook rewired, the 09-23 pointer file moved into the state folder
 - [x] The harness prints the first lines a failing check saw (the laptop's #43 report had nothing to reason from)
 - [x] **Release:** the maintainer's live test passed (banner + rot check), `release.sh 0.1.8` tagged `84521d4`, GitHub Release Latest with the signed tarball, five issues closed, topics `aur` + `aur-package` added
-- [ ] **AUR 0.1.8-1:** recipe bumped and committed locally (`d241414`), built locally AND in a clean chroot (210 checks in check() both times); the push waits for the maintainer's install test. Found on the way: python should be a checkdepends (issue filed); the KognogOS os-release hook errors inside any chroot (KognogOS #16)
+- [x] **AUR 0.1.8-1:** built locally AND in a clean chroot (210 checks in check() both times), installed and run by the maintainer, then pushed (`d241414`). Found on the way: python should be a checkdepends (issue filed); the KognogOS os-release hook errors inside any chroot (KognogOS #16)
 
 ## 2026-10-11 · What it needs, measured
 - [x] **What it needs, measured** (2026-10-11, the Forge Suite audit): `docs/PACKAGING.md`; the AUR recipe 0.1.7-1 builds clean in a clean Arch system (180 checks) and matches the code
