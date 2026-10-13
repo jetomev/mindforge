@@ -66,10 +66,19 @@ queue_lines() { tr -d '\r' < "$STATE/queue.md"; }
 
 # Every repo worth reporting on: all repos directly under any root, PLUS the
 # governing repo of every project the queue names. Deduplicated.
+# #34 / #43 · Dedup by the path GIT spells, never by the path the folder
+# listing spells. On Windows the listing says /c/Users/x/repo and git says
+# C:/Users/x/repo; a junction (or a symlinked root) adds a third spelling. A
+# string compare saw two repos where there was one: the brief counted every
+# queued repo twice, and R11 named every queued project as missing.
 all_repos() {
   local root d proj g
   { while IFS= read -r root; do
-      for d in "$root"/*/.git; do [ -d "$d" ] && printf '%s\n' "${d%/.git}"; done
+      for d in "$root"/*/.git; do
+        [ -d "$d" ] || continue
+        d=${d%/.git}
+        if g=$(governing_repo "$d") && [ -n "$g" ]; then printf '%s\n' "$g"; else printf '%s\n' "$d"; fi
+      done
     done < <(proj_roots)
     if [ -r "$STATE/queue.md" ]; then
       while IFS=$'\t' read -r proj _; do
@@ -656,13 +665,14 @@ rot_checks() {
   # deliberate opt-out -- visible in the file, like "-" in column 5.
   # No queue.md is the first-run path (F-20), not a finding.
   if [ -r "$STATE/queue.md" ]; then
-    local days="${MINDFORGE_ACTIVE_DAYS:-14}" cutoff covered="" quiet="" proj d g
+    local days="${MINDFORGE_ACTIVE_DAYS:-14}" cutoff covered="" quiet="" names=" " proj d g
     cutoff=$(( $(date +%s) - days * 86400 ))
     while IFS=$'\t' read -r proj _; do
       case "$proj" in
         @quiet*) quiet="$quiet ${proj#@quiet} " ;;
         \#*|@*|"") ;;
-        *) d=$(proj_dir "$proj") && g=$(governing_repo "$d") && [ -n "$g" ] && \
+        *) names="$names$(basename "$proj") "     # the queue's own names, for the twins
+           d=$(proj_dir "$proj") && g=$(governing_repo "$d") && [ -n "$g" ] && \
              covered="$covered"$'\n'"$g" ;;
       esac
     done < <(queue_lines)
@@ -671,12 +681,22 @@ rot_checks() {
         [ -d "$d" ] || continue
         d=${d%/.git}
         local n t base; n=$(basename "$d")
-        grep -qxF "$d" <<<"$covered" && continue
+        # #43 · compare git's spelling with git's spelling (see all_repos).
+        g=$(governing_repo "$d") && [ -n "$g" ] || g="$d"
+        grep -qxF "$g" <<<"$covered" && continue
         case " $quiet " in *" $n "*) continue ;; esac
         # aur-<name> and aur-<name>-remote are packaging for <name>.
+        # #42 · Arch names a Python library python-<name>, so aur-python-<name>
+        # is packaging for <name> too (forgekit's twin is aur-python-forgekit).
+        # Matched against the queue's NAMES, not repo paths: a sub-project of a
+        # monorepo (forge-suite/forgekit) is governed by the monorepo, and its
+        # path never ends in the project's name.
         case "$n" in
           aur-*) base=${n#aur-}; base=${base%-remote}
-                 grep -q "/$base\$" <<<"$covered" && continue ;;
+                 case "$names" in *" $base "*) continue ;; esac
+                 case "$base" in
+                   python-*) case "$names" in *" ${base#python-} "*) continue ;; esac ;;
+                 esac ;;
         esac
         # Unreadable repos are R3's to report; a second line would be noise.
         t=$(git -C "$d" log -1 --format=%ct 2>/dev/null) || continue
@@ -1055,6 +1075,12 @@ wrap() {
     return 1
   fi
   rm -f "$STATE/wip.md"          # wrapped work is no longer in flight
+  # #37 · The banner follows the work. A focus that names a project with a
+  # status script moves the pointer; one that names none leaves it alone.
+  local ap
+  if ap=$(focus_project "$focus") && [ -n "$ap" ]; then
+    mkdir -p "$STATE" && printf '%s\n' "$ap" > "$ACTIVE" && ACTIVE_MOVED="$ap"
+  fi
   # The mark stays, stamped with this row's end, until session-end spends it.
   [ -n "$MK" ] && [ -r "$MK" ] && \
     printf '%s\t%s\t%s\n' "$(cut -f1 "$MK")" "$(cut -f2 "$MK")" "$LOGGED_END" > "$MK"
@@ -1065,6 +1091,7 @@ wrap() {
     printf '%swrapped:%s %s\n' "$G" "$O" "$focus"
   fi
   printf '%s\n' "$bullets" | tr '|' '\n' | sed 's/^/  · /'
+  [ -n "${ACTIVE_MOVED:-}" ] && printf '%sactive project:%s %s\n' "$D" "$O" "$(basename "$ACTIVE_MOVED")"
   printf '%s' "$CHECK_OUT"
   # F-17 · Open items are output, not an error: wrap exits 0 either way. It
   # used to exit 1 whenever it warned, which broke && chains and would mark a
@@ -1224,8 +1251,23 @@ drift() {
 #   mindforge tone                 (the hook; reads the hook's JSON on stdin)
 #   mindforge tone --check <file>  print the tells in a text file; exit 1 if any
 #   ~/.config/mindforge/tone.local: extra patterns, one regex per line (optional)
+# #63 · On Windows `python3` can be the Microsoft Store placeholder: it is on
+# PATH, `command -v` finds it, and running it prints "Python was not found"
+# and fails -- so every tone check failed on the laptop while the desktop
+# passed. A name on PATH proves nothing; only a run does. First to run wins.
+find_python() {
+  local c
+  for c in python3 python; do
+    command -v "$c" >/dev/null 2>&1 || continue
+    "$c" -c 'import json, re' >/dev/null 2>&1 && { printf '%s' "$c"; return 0; }
+  done
+  command -v py >/dev/null 2>&1 && py -3 -c 'import json, re' >/dev/null 2>&1 && { printf 'py -3'; return 0; }
+  return 1
+}
+
 tone() {
-  command -v python3 >/dev/null 2>&1 || { chime; exit 0; }   # no python: never block a reply
+  local py
+  py=$(find_python) || { chime; exit 0; }   # no python that runs: never block a reply
   local mode="${1:-}" file="${2:-}" code
   # the code goes in through -c, so stdin stays what the hook sent
   code=$(cat <<'PY'
@@ -1318,7 +1360,8 @@ else:
 sys.exit(3)   # 3 = blocked: the chime waits for the rewrite
 PY
 )
-  python3 -c "$code" "$mode" "$file" "$STATE" "$HOME/.config/mindforge/tone.local"
+  # $py unquoted on purpose: on Windows it can be two words, `py -3`.
+  $py -c "$code" "$mode" "$file" "$STATE" "$HOME/.config/mindforge/tone.local"
   local rc=$?
   [ "$mode" = "--check" ] && return "$rc"
   [ "$rc" -eq 3 ] && return 0     # blocked: no chime yet, the reply comes back
@@ -1360,6 +1403,82 @@ chime() {
   return 0
 }
 
+# ── active · the active project's banner (0.1.8, #37) ───────────────────────
+# A personal hook printed scripts/status.sh of whatever path sat in a hand-
+# edited pointer file, and nothing ever moved the pointer: not a wrap, not a
+# change of repo. On 2026-09-29 it announced DecadeDrop at the start of a
+# hypeForge session, next to a briefing that said hypeForge -- two answers to
+# "what are we working on?" on one screen, the wrong one first. Same family
+# as #28: a file that is right only while someone remembers to edit it.
+# Two fixes, both here. `wrap` moves the pointer when the focus names a
+# project that has a status script, so nobody edits the file. And the banner
+# compares the pointer with the last wrapped session and SAYS SO when they
+# disagree -- drift on screen, not spoken as fact.
+#   mindforge active            the banner (a SessionStart hook; silent with no pointer)
+#   mindforge active --show     where the pointer points
+#   mindforge active <path>     point at a project (it needs scripts/status.sh)
+#   mindforge active --clear    no banner
+ACTIVE="$STATE/active-project"
+LEGACY_ACTIVE="$CLAUDE_DIR/active-project"     # where the 2026-09-23 hook kept it
+
+physical() { ( cd "$1" 2>/dev/null && pwd -P ); }
+
+active_path() {   # the pointer, expanded; status 1 when there is none
+  if [ ! -e "$ACTIVE" ] && [ -s "$LEGACY_ACTIVE" ]; then
+    mkdir -p "$STATE" && mv -f "$LEGACY_ACTIVE" "$ACTIVE" 2>/dev/null
+  fi
+  [ -s "$ACTIVE" ] || return 1
+  head -1 "$ACTIVE" | tr -d '\r' | sed "s|^~|$HOME|"
+}
+
+# The project a focus line names: every repo under the roots and every
+# project the queue names is a candidate if it has scripts/status.sh; the
+# longest name found in the text as a whole word, case-insensitive, wins.
+# Empty when the focus names none -- then the pointer stays where it is.
+focus_project() {
+  local focus="$1" best="" best_name="" cand name proj d
+  while IFS= read -r cand; do
+    [ -n "$cand" ] && [ -x "$cand/scripts/status.sh" ] || continue
+    name=$(basename "$cand")
+    grep -qiwF -- "$name" <<<"$focus" || continue
+    [ ${#name} -gt ${#best_name} ] && { best="$cand"; best_name="$name"; }
+  done < <( { all_repos
+              if [ -r "$STATE/queue.md" ]; then
+                while IFS=$'\t' read -r proj _; do
+                  case "$proj" in \#*|@*|"") continue;; esac
+                  d=$(proj_dir "$proj") && printf '%s\n' "$d"
+                done < <(queue_lines)
+              fi; } | sort -u )
+  [ -n "$best" ] && printf '%s' "$best"
+}
+
+active() {
+  local arg="${1:-}" p
+  case "$arg" in
+    --show)  p=$(active_path) || { echo "active project: none"; return 0; }
+             printf '%s\n' "$p"; return 0 ;;
+    --clear) rm -f "$ACTIVE" "$LEGACY_ACTIVE"; echo "active project: none"; return 0 ;;
+    "")      ;;
+    -*)      bad_option active "$arg" ;;
+    *)       p=$(physical "${arg/#\~/$HOME}") || { echo "mindforge active: '$arg' is not a folder" >&2; return 2; }
+             [ -x "$p/scripts/status.sh" ] || { echo "mindforge active: $p has no scripts/status.sh" >&2; return 2; }
+             mkdir -p "$STATE" && printf '%s\n' "$p" > "$ACTIVE" || { echo "mindforge active: could not write $ACTIVE" >&2; return 1; }
+             printf 'active project: %s\n' "$p"; return 0 ;;
+  esac
+  p=$(active_path) || return 0            # no pointer: no banner, by design
+  [ -d "$p" ] || { echo "active-project points at '$p', which does not exist"; return 0; }
+  [ -x "$p/scripts/status.sh" ] || { echo "active project '$p' has no scripts/status.sh"; return 0; }
+  local L f w
+  L=$(last_wrapped); f=$(cut -f4 <<<"$L")
+  if [ -n "$f" ] && w=$(focus_project "$f") && [ -n "$w" ] && [ "$(physical "$w")" != "$(physical "$p")" ]; then
+    printf 'ACTIVE PROJECT DISAGREES: the pointer says %s, but the last wrapped session was about %s ("%s"). Say so, and ask which one before treating either as the project in play.\n' \
+      "$(basename "$p")" "$(basename "$w")" "$f"
+  fi
+  echo "ACTIVE PROJECT — render this to the person, they cannot see hook output."
+  echo "Standing instruction: show this summary and list again after every step, and keep TODO.md current."
+  bash "$p/scripts/status.sh"
+}
+
 usage() {
   cat <<'USAGE'
 usage:
@@ -1374,6 +1493,8 @@ usage:
   mindforge log [--drop-last]            recent rows / remove the last (backup kept)
   mindforge rot                          the silent-failure checks
   mindforge tone [--check <file>]        the tie alert (a Stop hook; --check reads a file)
+  mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook);
+                                         wrap moves it to the project the focus names
   mindforge chime [--test]               a sound when the assistant is done and waiting
   mindforge session-start|session-end    (called by hooks)
   mindforge --version
@@ -1393,6 +1514,7 @@ case "${1:-brief}" in
   rot)           rot ;;
   tone)          shift; tone "$@" ;;
   chime)         shift; chime "$@" ;;
+  active)        shift; active "$@" ;;
   session-start) session_start ;;
   session-end)   session_end ;;
   wrap)          shift; wrap "$@" ;;

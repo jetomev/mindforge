@@ -48,7 +48,7 @@ STUB
 mf() {
   # TZ only when set: an EMPTY TZ means UTC, which moves "now" by hours.
   env -i PATH="$SB/bin:$PATH" HOME="$SB/home" ${TZ:+TZ="$TZ"} \
-    MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="$SB/projects" \
+    MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="${SB_PROJECTS:-$SB/projects}" \
     MINDFORGE_MEMORY="$SB/mem" CLAUDE_CODE_SESSION_ID="$SID" \
     SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
     MINDFORGE_CHIME="${MINDFORGE_CHIME:-/nonexistent-chime}" MINDFORGE_CHIME_PLAYER="${MINDFORGE_CHIME_PLAYER:-}" \
@@ -87,7 +87,13 @@ check() {
   local name="$1"; shift
   RAN=$((RAN+1))
   if "$@"; then PASS=$((PASS+1)); printf '  ok     %s\n' "$CUR: $name"
-  else FAIL=$((FAIL+1)); FAILED+=("$CUR: $name"); printf '  FAIL   %s\n' "$CUR: $name"; fi
+  else FAIL=$((FAIL+1)); FAILED+=("$CUR: $name"); printf '  FAIL   %s\n' "$CUR: $name"
+    # #43 · A failing check on another machine printed nothing to reason from:
+    # eleven release checks failed on the laptop and the report could not say
+    # whether the script refused for the wrong reason or never ran. The first
+    # lines of what the check looked at go with the verdict.
+    [ -n "${out:-}" ] && head -4 <<<"$out" | sed 's/^/         | /'
+  fi
 }
 xfail() {
   local issue="$1" name="$2"; shift 2
@@ -577,14 +583,19 @@ old_commit() {   # old_commit <repo>: its only commit moved back to 2020
 }
 if begin "R11 active work missing from the queue"; then
   make_repo listed; make_repo forgotten; make_repo aur-listed; make_repo aur-listed-remote
+  make_repo aur-python-listed; make_repo aur-python-other     # #42: Arch's python-<name>
+  make_repo aur-sub; make_repo aur-python-sub                 # twins of a monorepo sub-project
   make_repo parked; make_repo ancient; old_commit ancient
   make_repo mono; mkdir -p "$SB/projects/mono/sub"
   printf '@quiet parked\nlisted\tthe task\t3\tno\t-\nmono/sub\tthe sub task\t2\tno\t-\n' > "$SB/state/queue.md"
   out=$(mf rot)
   check "a recently active repo with no queue line is named" grep -q 'R11.*forgotten has commits from' <<<"$out"
-  check "exactly one R11 (only the forgotten repo)"         [ "$(grep -c 'R11' <<<"$out")" -eq 1 ]
+  check "exactly two R11 (forgotten, and the python twin of nothing)" [ "$(grep -c 'R11' <<<"$out")" -eq 2 ]
   check "a queued repo is not named"                        bash -c '! grep -q "R11.*listed has" <<<"$1"' _ "$out"
   check "its AUR twins are not named"                       bash -c '! grep -q "R11.*aur-listed" <<<"$1"' _ "$out"
+  check "its aur-python- twin is not named (#42)"           bash -c '! grep -q "R11.*aur-python-listed" <<<"$1"' _ "$out"
+  check "an aur-python- twin of an unqueued project is named" grep -q 'R11.*aur-python-other has commits' <<<"$out"
+  check "the twins of a monorepo sub-project are not named"   bash -c '! grep -q "R11.*aur-.*sub" <<<"$1"' _ "$out"
   check "an @quiet repo is not named"                       bash -c '! grep -q "R11.*parked" <<<"$1"' _ "$out"
   check "an old repo is not named"                          bash -c '! grep -q "R11.*ancient" <<<"$1"' _ "$out"
   check "a monorepo covered by a sub-project is not named"  bash -c '! grep -q "R11.*mono" <<<"$1"' _ "$out"
@@ -592,6 +603,28 @@ if begin "R11 active work missing from the queue"; then
   check "setup: ancient's commit is from 2020"              [ "$(git -C "$SB/projects/ancient" log -1 --format=%cs)" = 2020-01-01 ]
   rm "$SB/state/queue.md"
   check "no queue.md is first-run, not R11"                 bash -c '! grep -q "R11" <<<"$1"' _ "$(mf rot)"
+  end
+fi
+
+# #43 / #34 · One repo, two spellings of its path. On Windows the folder
+# listing says /c/Users/x/repo and git says C:/Users/x/repo; a junction (or a
+# symlinked root, which is how it is staged here) resolves to a third. The
+# brief counted every queued repo twice (#34) and R11 named every queued
+# project as missing (#43). The setup assertion proves the two spellings
+# really differ in the sandbox, or the checks below prove nothing.
+if begin "one repo under two spellings of its path"; then
+  make_repo listed; make_repo forgotten
+  ln -s "$SB/projects" "$SB/link"
+  printf 'listed\tthe task\t3\tno\t-\n' > "$SB/state/queue.md"
+  check "setup: git spells the repo differently from the listing" \
+    [ "$(git -C "$SB/link/listed" rev-parse --show-toplevel)" != "$SB/link/listed" ]
+  out=$(SB_PROJECTS="$SB/link" mf brief --headline)
+  check "the headline counts 2 repos, not 3 (#34)"         grep -q 'git: 2 repos clean' <<<"$out"
+  commit_unpushed listed
+  out=$(SB_PROJECTS="$SB/link" mf rot)
+  check "R11 does not name the queued repo (#43)"          bash -c '! grep -q "R11.*listed has" <<<"$1"' _ "$out"
+  check "R11 still names the forgotten one"                grep -q 'R11.*forgotten has commits' <<<"$out"
+  check "R3 counts the unpushed repo once, not twice (#34)" [ "$(grep -c 'R3.*listed has 1 unpushed' <<<"$out")" -eq 1 ]
   end
 fi
 
@@ -670,9 +703,12 @@ fi
 # transcript. Fed a memo and a clean reply; the memo must be caught, the clean
 # one must pass, a tool result must not reset the reply, the second pass must
 # not block, and a missing transcript must be silent.
+# #63 · the harness needs a python that runs, for the same reason tone does.
+PY=python3
+for c in python3 python; do command -v "$c" >/dev/null 2>&1 && "$c" -c pass 2>/dev/null && { PY="$c"; break; }; done
 fake_transcript() {   # fake_transcript <file> <reply text...>  (one user turn, then the reply)
   local f="$1"; shift
-  python3 - "$f" "$*" <<'PY'
+  "$PY" - "$f" "$*" <<'PY'
 import json, sys
 f, reply = sys.argv[1], sys.argv[2]
 rows = [
@@ -723,6 +759,69 @@ if begin "tone as the Stop hook"; then
   fake_transcript "$SB/l.jsonl" "hell yeah it worked"
   out=$(hook_json "$SB/l.jsonl" | mf tone)
   check "a local pattern is honoured"            grep -q 'a local pattern' <<<"$out"
+  end
+fi
+
+# #63 · On the Windows laptop `python3` is the Microsoft Store placeholder:
+# on PATH, found by `command -v`, and it prints "Python was not found" and
+# fails when run. Staged here with a stub that does exactly that, in front of
+# a `python` that works; then with nothing that works at all.
+if begin "tone finds a python that runs"; then
+  REAL_PY=$(command -v "$PY")
+  printf '#!/usr/bin/env bash\necho "Python was not found; run without arguments to install from the Microsoft Store" >&2\nexit 9009\n' > "$SB/bin/python3"
+  printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$REAL_PY" > "$SB/bin/python"
+  chmod +x "$SB/bin/python3" "$SB/bin/python"
+  check "setup: the python3 on PATH refuses to run" \
+    bash -c '! env -i PATH="$1:$PATH" python3 -c pass 2>/dev/null' _ "$SB/bin"
+  printf '## Heading\n\nExpected result: a line.\n' > "$SB/memo.md"
+  out=$(mf tone --check "$SB/memo.md"); rc=$?
+  check "the memo is still caught through \`python\` (exit 1)" [ "$rc" -eq 1 ]
+  check "names the header"                       grep -q 'a section header' <<<"$out"
+  fake_transcript "$SB/t.jsonl" "Here's where it all stands."
+  out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
+  check "the hook still blocks"                  grep -q '"decision": *"block"' <<<"$out"
+  cp "$SB/bin/python3" "$SB/bin/python"; cp "$SB/bin/python3" "$SB/bin/py"
+  out=$(mf tone --check "$SB/memo.md"); rc=$?
+  check "no python that runs: --check is silent, exit 0" [ -z "$out" ] && [ "$rc" -eq 0 ]
+  out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
+  check "no python that runs: the hook never blocks"    [ -z "$out" ] && [ "$rc" -eq 0 ]
+  end
+fi
+
+# #37 · The active project's banner. The pointer used to be a hand-edited
+# file that nothing moved; now `wrap` moves it to the project the focus
+# names, and the banner says so when the pointer and the last wrapped
+# session disagree instead of rendering the stale one as fact.
+status_script() { mkdir -p "$SB/projects/$1/scripts"; printf '#!/usr/bin/env bash\necho "status of %s"\n' "$1" > "$SB/projects/$1/scripts/status.sh"; chmod +x "$SB/projects/$1/scripts/status.sh"; }
+if begin "active project"; then
+  make_repo listed; make_repo other; make_repo plain; status_script listed; status_script other
+  printf 'listed\tthe task\t3\tno\t-\n' > "$SB/state/queue.md"
+  out=$(mf active); rc=$?
+  check "no pointer: silence, exit 0"            [ -z "$out" ] && [ "$rc" -eq 0 ]
+  out=$(mf active "$SB/projects/plain" 2>/dev/null); rc=$?
+  check "a project with no status script is refused (exit 2)" [ "$rc" -eq 2 ]
+  out=$(mf active "$SB/projects/listed"); rc=$?
+  check "pointing at a project is confirmed"     [ "$rc" -eq 0 ] && grep -q 'active project: .*/listed' <<<"$out"
+  out=$(mf active)
+  check "the banner carries the directive"       grep -q '^ACTIVE PROJECT' <<<"$out"
+  check "the banner runs the status script"      grep -q 'status of listed' <<<"$out"
+  check "no disagreement with nothing wrapped"   bash -c '! grep -q DISAGREES <<<"$1"' _ "$out"
+  now_mark; out=$(mf wrap "paperwork, nothing in particular" "b1")
+  check "a focus naming no project leaves the pointer" [ "$(mf active --show)" = "$SB/projects/listed" ]
+  now_mark; out=$(mf wrap "other: the whole afternoon" "b1|b2")
+  check "setup: the wrap was recorded"           grep -q 'other: the whole afternoon' "$SB/state/sessions.log"
+  check "wrap moves the pointer to the project the focus names" [ "$(mf active --show)" = "$SB/projects/other" ]
+  check "wrap says so"                           grep -q 'active project: other' <<<"$out"
+  check "the banner follows"                     grep -q 'status of other' <<<"$(mf active)"
+  mf active "$SB/projects/listed" >/dev/null     # a stale pointer, set by hand
+  out=$(mf active)
+  check "pointer vs last wrap: the disagreement is said" grep -q 'DISAGREES: the pointer says listed, but the last wrapped session was about other' <<<"$out"
+  check "and the stale status still prints, after the warning" grep -q 'status of listed' <<<"$out"
+  printf '%s\n' "$SB/projects/other" > "$SB/home/.claude/active-project"; rm "$SB/state/active-project"
+  check "the 2026-09-23 pointer file is adopted"  [ "$(mf active --show)" = "$SB/projects/other" ]
+  check "and moved into the state folder"        [ ! -e "$SB/home/.claude/active-project" ] && [ -s "$SB/state/active-project" ]
+  mf active --clear >/dev/null
+  check "--clear: silence again"                 [ -z "$(mf active)" ]
   end
 fi
 
