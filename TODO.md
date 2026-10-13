@@ -1,12 +1,20 @@
 # mindForge — the list
 
-**Current release: v0.1.7** (6 Oct 2026) — the tie alert and the chime (#45), and `scripts/release.sh` (#41).
-**Tests:** `bash testing/run-tests.sh`, 180 checks, all passing (6 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
+**Current release: v0.1.8** (12 Oct 2026, in progress — waits for the maintainer's local test, then tag + GitHub Release + AUR) — the 0.1.8 batch: #63, #43 (+#34), #42, #37.
+**Tests:** `bash testing/run-tests.sh`, 210 checks, all passing (12 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
 
 ---
+
+## 2026-10-12 · The 0.1.8 batch
+- [x] **#63** · W-13: the tie alert on Windows — `python3` is the Store placeholder; `tone` now keeps the first python that runs (`python3`, `python`, `py -3`)
+- [x] **#43** · W-11: R11 named every queued project as missing on the laptop — one repo under two spellings of its path; compared in git's spelling now. **#34** (repo counted twice) was the same line of code and went with it
+- [x] **#42** · `aur-python-<name>` is the AUR twin of `<name>` (forgekit's `@quiet` workaround can go)
+- [x] **#37** · S-10: `mindforge active` replaces the personal hook; `wrap` moves the pointer; a disagreement with the last wrapped session is said on screen. This desktop's hook rewired, the 09-23 pointer file moved into the state folder
+- [x] The harness prints the first lines a failing check saw (the laptop's #43 report had nothing to reason from)
+- [ ] **Release:** the maintainer tests the fix live (new session: banner + brief), then `bash scripts/release.sh 0.1.8`, GitHub Release with signed tarball, AUR 0.1.8-1 built in the clean chroot, his local install, then the AUR push
 
 ## 2026-10-11 · What it needs, measured
 - [x] **What it needs, measured** (2026-10-11, the Forge Suite audit): `docs/PACKAGING.md`; the AUR recipe 0.1.7-1 builds clean in a clean Arch system (180 checks) and matches the code
@@ -35,9 +43,9 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 - [ ] **#19** · Auto mode will not let the assistant install hooks — the install has to be designed around that.
 - [ ] **#20** · Desktop notifications are Linux-only, and that isn't documented.
 - [ ] **#21** · The PowerShell wrapper breaks quoted text, so `wrap` and `drift` record the wrong thing.
-- [ ] **#34** · The same project is counted twice on Windows because of two spellings of the drive path.
+- [x] **#34** · The same project is counted twice on Windows — fixed in 0.1.8 with #43 (same cause).
 
-- [ ] **#43** · W-11 (filed from the laptop 2026-10-05 after it pulled v0.1.6): R11 names every queued project as missing there (junctions to Dropbox folders, same family as #34), and the eleven `release.sh` checks fail without saying why. Suite there: 160 checks, 145 pass. To fix here.
+- [x] **#43** · W-11: fixed in 0.1.8 (the R11 part). The eleven `release.sh` failures on the laptop are still unexplained — the harness now prints what a failing check saw, so the next laptop run can tell us.
 
 ### 1b · Asked by the maintainer (2026-10-06)
 - [x] **#45** · `mindforge tone` (the tie alert, a Stop hook) and `mindforge chime` — shipped in v0.1.7 the same day. Design fix, not a reminder: the tone rule had lost to the app's built-in report style all afternoon
@@ -48,7 +56,7 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 - [ ] **#25** · A warning written in a decision document does not reach the script that needs it.
 - [ ] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway.
 - [ ] **#28** · The one-slot handoff note is maintained by nothing — the same failure as the old queue file.
-- [ ] **#37** · S-10: the active-project banner is maintained by nothing — it announced DecadeDrop at the start of a hypeForge session (found 2026-09-29).
+- [x] **#37** · S-10: the active-project banner — `mindforge active` in 0.1.8.
 - [ ] **#47** · R8 cannot see stale queue rows: 8 of 18 rows opt out with `-` and are never checked again, and a row whose reference is still open passes even when its sentence lists finished work (found 2026-10-08: forgekit said 0.8.0, hypeForge listed done jobs). Ideas: compare a row's "X.Y.Z shipped" with the newest tag; `wrap` asks "still true?" for every project touched.
 - [ ] **#30** · A relayed handoff carried one machine's way of working to another.
 - [ ] **#31** · The test-matrix advice about sandboxes behaves differently on every machine.
@@ -65,7 +73,7 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 - [ ] **R11's first real finding, for the maintainer:** `homelab` (commits 28 Sep) has no queue line. Add it with its next step, or put it on an `@quiet` line
 
 ## R11 false alarm (2026-10-01)
-- [ ] **#42 · AUR twins whose package name differs from the repo name are not matched.** R11 named `aur-python-forgekit` (commits that day) because the twin rule strips `aur-` and looks for a queue repo called `python-forgekit`; the project is `forgekit`. Options: a `@twin aur-python-forgekit forgekit` directive, or read `pkgname`/`url` from the twin's PKGBUILD. Until then, `@quiet aur-python-forgekit` is the visible workaround (**in the queue since 2026-10-01 evening; issue #42**)
+- [x] **#42 · fixed in 0.1.8** (the twin rule strips `python-` too, and matches the queue's names, so a monorepo sub-project's twin counts). Was: **AUR twins whose package name differs from the repo name are not matched.** R11 named `aur-python-forgekit` (commits that day) because the twin rule strips `aur-` and looks for a queue repo called `python-forgekit`; the project is `forgekit`. Options: a `@twin aur-python-forgekit forgekit` directive, or read `pkgname`/`url` from the twin's PKGBUILD. Until then, `@quiet aur-python-forgekit` is the visible workaround (**in the queue since 2026-10-01 evening; issue #42**)
 
 ## Release incident, v0.1.6 (2026-10-01)
 - [x] A refused commit was followed by a tag and a push anyway (the tag + push sat on the line after a heredoc). v0.1.6 public on the wrong commit for minutes; re-tagged with the maintainer's OK. **Fixed by design: `scripts/release.sh` (#41)**, which refuses before tagging unless tree clean, main current, VERSION + changelog match, tag new, tests pass. 14 checks; three planted broken copies each caught

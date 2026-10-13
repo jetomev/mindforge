@@ -12,12 +12,12 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.7, one month old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.8, six weeks old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
-> nine defects of its own; three are fixed, six are open and listed in the
-> issues. Its **automated test suite** has 180 checks. Every check it makes
+> thirteen defects of its own; five are fixed, eight are open and listed in the
+> issues. Its **automated test suite** has 210 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 > true. Still: one user, and we publish early and say so.
 
@@ -85,6 +85,7 @@ One command per turn - intro, command, expected result, then stop.
 | `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
 | `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. First hit: the reply goes back for a rewrite and you see the alert; second pass: alert only. `--check` reads a file instead |
 | `mindforge chime [--test]` | **a sound when the assistant is done and waiting** (0.1.7), so you hear it from the next room. From the Stop and Notification hooks; silent when there is no player or sound file |
+| `mindforge active [--show\|--clear\|<path>]` | **the active project's banner** (0.1.8): a SessionStart hook that prints `scripts/status.sh` of the project in play. `wrap` moves the pointer to the project the focus names, so nobody edits it by hand; when the pointer and the last wrapped session disagree, the banner says so instead of stating the stale one as fact. Silent with no pointer |
 
 Two files hold your rules, and the difference is the whole point:
 
@@ -170,7 +171,8 @@ To wire the hooks, add to `~/.claude/settings.json`:
 { "hooks": {
     "SessionStart": [
       { "matcher": "startup|resume|clear",
-        "hooks": [{ "type": "command", "command": "mindforge session-start" }] },
+        "hooks": [{ "type": "command", "command": "mindforge session-start" },
+                  { "type": "command", "command": "mindforge active" }] },
       { "matcher": "compact",
         "hooks": [{ "type": "command", "command": "cat \"$HOME/.claude/CLAUDE.md\"" }] }
     ],
@@ -185,7 +187,9 @@ To wire the hooks, add to `~/.claude/settings.json`:
     ] } }
 ```
 
-`Stop` and `Notification` are the 0.1.7 pair: the tie alert and the chime. Both are optional; the brief does not count them as missing.
+`Stop` and `Notification` are the 0.1.7 pair: the tie alert and the chime. `mindforge active`
+(0.1.8) is the active project's banner, for projects that carry a `scripts/status.sh`. All
+three are optional; the brief does not count them as missing.
 
 ### The tie alert — why a hook and not a rule
 
@@ -269,10 +273,13 @@ the version and changelog match, and the tests pass (#41).
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 180 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 210 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
-the release script, R11, the tie alert, the chime, and the "could not look" path of R3–R6 and R10 — and refuses to report green
-when nothing ran. R1, R2 and much of the full brief are still checked by hand
+the release script, R11, the tie alert, the chime, the active project, one repo
+seen under two spellings of its path, and the "could not look" path of R3–R6 and
+R10 — and refuses to report green when nothing ran. A failing check prints the
+first lines of what it looked at, so a report from another machine carries
+evidence, not just a verdict. R1, R2 and much of the full brief are still checked by hand
 against the 115-check matrix.
 
 **Assistant-agnostic in method, Claude Code in implementation.** The tiers, the

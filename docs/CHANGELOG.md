@@ -2,6 +2,45 @@
 
 Newest first.
 
+## v0.1.8 — 2026-10-12
+
+**The 0.1.8 batch: four bugs that bit every session, on one machine or the
+other.** v0.1.7 fails **20 of this release's 209 checks**, every one of them on
+one of the four.
+
+- 🪟 **The tie alert runs on Windows (#63, W-13).** `python3` on the work laptop
+  is the Microsoft Store placeholder: on PATH, found by `command -v`, and it
+  prints "Python was not found" when run — so all ten tone checks failed there.
+  `tone` now tries `python3`, `python` and `py -3` and keeps the first that
+  actually executes; none: silence, never a blocked reply. The test harness
+  does the same for its own helper.
+- 🔁 **One repo, one spelling (#43 W-11, and #34 with it).** The folder listing
+  spells a path `/c/Users/x/repo`, git spells it `C:/Users/x/repo`, and a
+  junction (or a symlinked root) adds a third. The repo list deduped by string,
+  so the brief counted every queued repo twice (#34) and R11 named every queued
+  project as missing (#43) — three false lines at every session start on the
+  laptop. Both sides are now compared in git's spelling. Staged on Linux with a
+  symlinked root, with a setup assertion that the two spellings really differ.
+- 🐍 **`aur-python-<name>` is the AUR twin of `<name>` (#42).** Arch names a
+  Python library `python-<name>`, so forgekit's packaging folder tripped R11
+  every session and sat on an `@quiet` line. Stripped like `aur-` and
+  `-remote`; an `aur-python-other` with no `other` line is still named.
+- 📌 **`mindforge active` — the active project's banner (#37, S-10).** The
+  banner was a personal hook reading a hand-edited pointer that nothing moved;
+  on 2026-09-29 it announced DecadeDrop at the start of a hypeForge session,
+  next to a briefing that said hypeForge. Now it is a subcommand: `wrap` moves
+  the pointer to the project the focus names (if it has `scripts/status.sh`),
+  and when the pointer and the last wrapped session disagree the banner says
+  so instead of stating the stale one as fact. The 2026-09-23 pointer file is
+  adopted and moved into the state folder on first run.
+- 🔍 **A failing check shows what it saw.** The laptop's report on #43 could
+  not say why eleven release checks failed, because the checks print nothing
+  of their own. Now a FAIL line is followed by the first lines of the output
+  the check examined.
+
+Tests: 210 checks, 210 pass (was 180). The 30 new ones cover the four fixes,
+each fed a known-bad input as well as a good one.
+
 ## v0.1.7 — 2026-10-06
 
 - 👔 **`mindforge tone` — the tie alert (#45).** The tone rule lost, every long

@@ -8,9 +8,10 @@ Newest first; Future at the top.
       the closeout, the queue, session start, the headline, the scrub hook and
       the could-not-look paths. R1, R2 and most of the full brief are still
       verified by hand against the 115-check matrix.
-- [ ] **Windows as a supported platform.** Six open findings from a month on
-      a Windows laptop (#15, #17–#21) plus #34: install, paths, hooks under auto
-      mode, notifications, the PowerShell wrapper.
+- [ ] **Windows as a supported platform.** Eight open findings from six weeks
+      on a Windows laptop (#15, #17–#21, #38, #46): install, paths, hooks under
+      auto mode, notifications, the PowerShell wrapper, the hook brief's
+      missing table.
 - [ ] **Stage 2 — the remote cache.** A scheduled collector for issue counts,
       published package versions and backup health, written to JSON. The brief
       reads the cache and **prints its age**, so it can never quietly go stale.
@@ -35,6 +36,19 @@ Newest first; Future at the top.
       the known "L1 does not load itself" weakness structurally; publish a
       short threat model, as ctx does even for a local-only tool. A deeper
       read decides which of these become issues.
+
+## v0.1.8 — 2026-10-12
+
+- [x] The tie alert runs on Windows: a python that actually executes (#63)
+- [x] One repo, one spelling: no double counts, no false R11 on junctions (#43, #34)
+- [x] `aur-python-<name>` rides on `<name>`'s queue line (#42)
+- [x] `mindforge active` — the banner follows `wrap`, and says so when it disagrees (#37)
+
+## v0.1.7 — 2026-10-06
+
+- [x] `mindforge tone` — the tie alert, a Stop hook (#45)
+- [x] `mindforge chime` — a sound when the assistant is done and waiting (#45)
+- [x] `scripts/release.sh` — refuses before anything is tagged or pushed (#41)
 
 ## v0.1.6 — 2026-10-01
 
