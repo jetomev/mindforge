@@ -1,6 +1,6 @@
 # mindForge — the list
 
-**Current release: v0.1.8** (12 Oct 2026, in progress — waits for the maintainer's local test, then tag + GitHub Release + AUR) — the 0.1.8 batch: #63, #43 (+#34), #42, #37.
+**Current release: v0.1.8** (12 Oct 2026) — the 0.1.8 batch: #63, #43 (+#34), #42, #37. GitHub Release Latest with signed files; AUR 0.1.8-1 built, push waits for the maintainer's install test.
 **Tests:** `bash testing/run-tests.sh`, 210 checks, all passing (12 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
@@ -14,7 +14,8 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **#42** · `aur-python-<name>` is the AUR twin of `<name>` (forgekit's `@quiet` workaround can go)
 - [x] **#37** · S-10: `mindforge active` replaces the personal hook; `wrap` moves the pointer; a disagreement with the last wrapped session is said on screen. This desktop's hook rewired, the 09-23 pointer file moved into the state folder
 - [x] The harness prints the first lines a failing check saw (the laptop's #43 report had nothing to reason from)
-- [ ] **Release:** the maintainer tests the fix live (new session: banner + brief), then `bash scripts/release.sh 0.1.8`, GitHub Release with signed tarball, AUR 0.1.8-1 built in the clean chroot, his local install, then the AUR push
+- [x] **Release:** the maintainer's live test passed (banner + rot check), `release.sh 0.1.8` tagged `84521d4`, GitHub Release Latest with the signed tarball, five issues closed, topics `aur` + `aur-package` added
+- [ ] **AUR 0.1.8-1:** recipe bumped and committed locally (`d241414`), built locally (210 checks in check()), clean-chroot build in the VM; the push waits for the maintainer's install test
 
 ## 2026-10-11 · What it needs, measured
 - [x] **What it needs, measured** (2026-10-11, the Forge Suite audit): `docs/PACKAGING.md`; the AUR recipe 0.1.7-1 builds clean in a clean Arch system (180 checks) and matches the code
