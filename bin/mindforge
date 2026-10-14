@@ -280,6 +280,32 @@ headline() {
   return 0
 }
 
+# #46 · the NEXT column's width: the terminal's width minus the other columns (the indent, REPO,
+# LAST, STATE with its longest wording), never under 24. No terminal width known (the hook, a
+# pipe, a file): the longest NEXT in the queue, so nothing is cut and the columns still line up.
+next_width() {
+  local rw="$1" cols="${COLUMNS:-}"
+  [ -z "$cols" ] && [ -t 1 ] && cols=$(tput cols 2>/dev/null)
+  if [ -n "$cols" ] && [ "$cols" -gt 0 ] 2>/dev/null; then
+    local w=$((cols - 2 - rw - 1 - 10 - 1 - 1 - 22))
+    [ "$w" -ge 24 ] || w=24
+    printf '%s' "$w"
+  else
+    local longest; longest=$(queue_lines | awk -F'\t' '/^[#@]/||$1==""{next} {print length($2)}' | sort -n | tail -1)
+    [ "${longest:-0}" -ge 42 ] || longest=42
+    printf '%s' "$longest"
+  fi
+}
+
+# cut_words <text> <width> -- the text, or its start cut at a word with an ellipsis when longer
+cut_words() {
+  local s="$1" w="$2"
+  if [ "${#s}" -le "$w" ]; then printf '%s' "$s"; return; fi
+  local t="${s:0:$((w - 1))}"
+  case "$t" in *" "*) t="${t% *}";; esac
+  printf '%s…' "$t"
+}
+
 full() {
   local queue_missing=0
   headline; echo
@@ -312,7 +338,12 @@ full() {
   local RW; RW=$(queue_lines | awk -F'\t' '/^[#@]/||$1==""{next} {print $1}' \
     | while IFS= read -r n; do printf '%s\n' "${#n}"; done | sort -n | tail -1)
   [ "${RW:-0}" -gt 20 ] || RW=20
-  printf '  %s %-10s %-42s %s\n' "$(pad_to "$RW" REPO)" "LAST" "NEXT" "STATE"
+  # #46 (W-12) · NEXT was cut at 42 characters, mid-word: the half that said what to do went
+  # missing from every row. Its width now follows the terminal (COLUMNS, else tput) with the other
+  # columns taken off; off a terminal (the hook, a file, a pipe) nothing is cut at all. A cut
+  # lands on a word boundary and says so with an ellipsis.
+  local NW; NW=$(next_width "$RW")
+  printf '  %s %-10s %s %s\n' "$(pad_to "$RW" REPO)" "LAST" "$(pad_to "$NW" NEXT)" "STATE"
   while IFS=$'\t' read -r proj next impact block ref; do
     case "$proj" in \#*|@*|"") continue;; esac   # @ lines are directives, not repos
     : "${ref:-}"                                  # column 5 is R8's business
@@ -338,7 +369,7 @@ full() {
       waits:*)  st="$st ${Y}waits${O}" ;;
       blocks:*) st="$st ${G}clears${O}" ;;
     esac
-    printf '  %s %-10s %s %b\n' "$(pad_to "$RW" "$proj")" "$last" "$(pad_to 42 "${next:0:42}")" "$st"
+    printf '  %s %-10s %s %b\n' "$(pad_to "$RW" "$proj")" "$last" "$(pad_to "$NW" "$(cut_words "$next" "$NW")")" "$st"
   done < <(queue_lines)
   fi
   echo
@@ -872,6 +903,10 @@ session_start() {
   # the session ignored it, re-deriving the same facts with seven tool calls.
   echo "<session-briefing>"
   headline
+  # #46 (W-12) · this is the SHORT brief, and it must say so: a session that took it for the whole
+  # left the person asking "where is the project table and status?". The sections it leaves out
+  # are named here, and the directive below says what to do when they are asked for.
+  echo "short brief: the Projects table, Recommended first and State are in \`mindforge brief\`"
   # #29 · The rot check exists for the moment nothing looks wrong, and that
   # moment is session start. It had two callers, both typed by a human, so it
   # ran only when someone already suspected a problem: an R7 finding was true
@@ -884,7 +919,10 @@ INSTRUCTION: open your first reply with the briefing above, rendered for the
 user -- they cannot see hook output. It is already accurate; do not re-derive
 it with tool calls. Name every rot-check finding in it; "nothing rotting" is
 the only line you may summarise. Then answer what they actually asked.
-Offer `mindforge brief` for the full picture; do not paste the full brief unasked.
+This is the short brief: the Projects table, Recommended first and State are NOT above.
+When the person asks for projects, status or "the brief", or types `mindforge brief`, run it
+and render the whole of it (the day before, the full Projects table, the recommendations).
+Offer it otherwise; do not paste the full brief unasked.
 DIRECTIVE
 }
 

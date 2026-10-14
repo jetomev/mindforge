@@ -51,6 +51,7 @@ mf() {
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="${SB_PROJECTS:-$SB/projects}" \
     MINDFORGE_MEMORY="$SB/mem" CLAUDE_CODE_SESSION_ID="$SID" \
     SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
+    ${COLUMNS:+COLUMNS="$COLUMNS"} \
     MINDFORGE_CHIME="${MINDFORGE_CHIME:-/nonexistent-chime}" MINDFORGE_CHIME_PLAYER="${MINDFORGE_CHIME_PLAYER:-}" \
     bash "$MF" "$@"
 }
@@ -132,6 +133,26 @@ if begin "session-start"; then
   check "wraps the briefing in tags"       grep -q '^<session-briefing>' <<<"$out"
   check "carries the directive"            grep -q '^INSTRUCTION:' <<<"$out"
   check "logs no row"                      [ "$(rows)" -eq 0 ]
+  # #46 (W-12) · the short brief names what it leaves out, and the directive says what to do
+  check "says which sections it leaves out" grep -q '^short brief: the Projects table, Recommended first and State' <<<"$out"
+  check "directive: run the full one when asked" grep -q 'run it' <<<"$out"
+  end
+fi
+
+# #46 (W-12) · the NEXT column was cut at 42 characters, mid-word. It follows the terminal's
+# width and cuts at a word with an ellipsis; off a terminal nothing is cut.
+if begin "brief: NEXT column"; then
+  long='Accountants email SENT 09-29 (the owner words) then groom the GitHub milestones and close the quarter'
+  printf 'alpha\t%s\t3\t-\t#7\n' "$long" > "$SB/state/queue.md"
+  out=$(COLUMNS=100 mf brief)
+  row=$(grep -m1 '^  alpha ' <<<"$out")                          # the table's row, not Recommended-first's
+  check "a narrow terminal cuts it"        bash -c '[[ "$1" == *"…"* ]]' _ "$row"
+  cell=$(sed -E 's/^  alpha +(no repo|[0-9-]+) +//; s/….*$//' <<<"$row")     # the NEXT text before the ellipsis
+  check "the cut lands on a word"          bash -c '[ -n "$2" ] && [[ "$1" == "$2 "* ]]' _ "$long" "$cell"
+  out=$(COLUMNS= mf brief)
+  check "off a terminal nothing is cut"    bash -c '[[ "$1" == *"close the quarter"* ]]' _ "$(grep -m1 '^  alpha ' <<<"$out")"
+  out=$(COLUMNS=250 mf brief)
+  check "a wide terminal shows it whole"   bash -c '[[ "$1" == *"close the quarter"* && "$1" != *"…"* ]]' _ "$(grep -m1 '^  alpha ' <<<"$out")"
   end
 fi
 

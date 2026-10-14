@@ -2,6 +2,20 @@
 
 Newest first.
 
+## Unreleased
+
+- 📏 **The brief's NEXT column follows the terminal (#46, W-12).** It was cut at 42
+  characters, mid-word, so every row lost the half that said what to do. Its width
+  is now the terminal's minus the other columns (`COLUMNS`, else `tput cols`); off
+  a terminal — the hook, a pipe, a file — nothing is cut at all, and the columns
+  still line up on the longest entry. A cut lands on a word and ends with an
+  ellipsis.
+- 🗒 **The hook's brief says it is the short one (#46).** It now carries the line
+  `short brief: the Projects table, Recommended first and State are in mindforge brief`,
+  and its directive tells the assistant to run and render the full brief when the
+  person asks for projects, status or the brief — a session once took the short one
+  for the whole and the person asked "where is the project table and status?".
+
 ## v0.1.8 — 2026-10-12
 
 **The 0.1.8 batch: four bugs that bit every session, on one machine or the
