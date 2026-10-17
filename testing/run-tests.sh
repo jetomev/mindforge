@@ -838,6 +838,10 @@ if begin "active project"; then
   out=$(mf active)
   check "pointer vs last wrap: the disagreement is said" grep -q 'DISAGREES: the pointer says listed, but the last wrapped session was about other' <<<"$out"
   check "and the stale status still prints, after the warning" grep -q 'status of listed' <<<"$out"
+  # The maintainer, 2026-10-17: "summarized project table, always, when I am calling a project. Many times now."
+  out=$(mf active "$SB/projects/listed")
+  check "switching to a project prints its summary too"   grep -q 'status of listed' <<<"$out" && grep -q '^ACTIVE PROJECT' <<<"$out"
+  check "a project just chosen is no disagreement"        bash -c '! grep -q DISAGREES <<<"$1"' _ "$out"
   printf '%s\n' "$SB/projects/other" > "$SB/home/.claude/active-project"; rm "$SB/state/active-project"
   check "the 2026-09-23 pointer file is adopted"  [ "$(mf active --show)" = "$SB/projects/other" ]
   check "and moved into the state folder"        [ ! -e "$SB/home/.claude/active-project" ] && [ -s "$SB/state/active-project" ]

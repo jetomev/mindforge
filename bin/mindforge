@@ -1491,7 +1491,7 @@ focus_project() {
 }
 
 active() {
-  local arg="${1:-}" p
+  local arg="${1:-}" p chosen=""
   case "$arg" in
     --show)  p=$(active_path) || { echo "active project: none"; return 0; }
              printf '%s\n' "$p"; return 0 ;;
@@ -1501,14 +1501,18 @@ active() {
     *)       p=$(physical "${arg/#\~/$HOME}") || { echo "mindforge active: '$arg' is not a folder" >&2; return 2; }
              [ -x "$p/scripts/status.sh" ] || { echo "mindforge active: $p has no scripts/status.sh" >&2; return 2; }
              mkdir -p "$STATE" && printf '%s\n' "$p" > "$ACTIVE" || { echo "mindforge active: could not write $ACTIVE" >&2; return 1; }
-             printf 'active project: %s\n' "$p"; return 0 ;;
+             printf 'active project: %s\n' "$p"
+             # the maintainer, 2026-10-17 ("summarized project table, always, when I am calling a project.
+             # Many times now"): switching prints the summary too, so it can't be skipped. The
+             # person just picked this project, so the last wrap naming another is no disagreement.
+             chosen=1 ;;
   esac
   p=$(active_path) || return 0            # no pointer: no banner, by design
   [ -d "$p" ] || { echo "active-project points at '$p', which does not exist"; return 0; }
   [ -x "$p/scripts/status.sh" ] || { echo "active project '$p' has no scripts/status.sh"; return 0; }
   local L f w
   L=$(last_wrapped); f=$(cut -f4 <<<"$L")
-  if [ -n "$f" ] && w=$(focus_project "$f") && [ -n "$w" ] && [ "$(physical "$w")" != "$(physical "$p")" ]; then
+  if [ -z "$chosen" ] && [ -n "$f" ] && w=$(focus_project "$f") && [ -n "$w" ] && [ "$(physical "$w")" != "$(physical "$p")" ]; then
     printf 'ACTIVE PROJECT DISAGREES: the pointer says %s, but the last wrapped session was about %s ("%s"). Say so, and ask which one before treating either as the project in play.\n' \
       "$(basename "$p")" "$(basename "$w")" "$f"
   fi
@@ -1531,7 +1535,7 @@ usage:
   mindforge log [--drop-last]            recent rows / remove the last (backup kept)
   mindforge rot                          the silent-failure checks
   mindforge tone [--check <file>]        the tie alert (a Stop hook; --check reads a file)
-  mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook);
+  mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook; <path> switches and shows it);
                                          wrap moves it to the project the focus names
   mindforge chime [--test]               a sound when the assistant is done and waiting
   mindforge session-start|session-end    (called by hooks)

@@ -9,6 +9,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 ---
 
 ## 2026-10-12 · The 0.1.8 batch
+- [x] **2026-10-17 · `mindforge active <path>` prints the summary too** (the maintainer: "summarized project table, always, when I am calling a project. Many times now."): switching used to print only the path, so the table showed only at session start and Claude kept skipping it. Now the switch prints the banner (a project just chosen is no disagreement with the last wrap). Checks 216 → 218; the new one seen failing on the old code. Live at once (the installed `mindforge` is this repo's bin); ships with 0.1.9
 - [x] **#63** · W-13: the tie alert on Windows — `python3` is the Store placeholder; `tone` now keeps the first python that runs (`python3`, `python`, `py -3`)
 - [x] **#43** · W-11: R11 named every queued project as missing on the laptop — one repo under two spellings of its path; compared in git's spelling now. **#34** (repo counted twice) was the same line of code and went with it
 - [x] **#42** · `aur-python-<name>` is the AUR twin of `<name>` (forgekit's `@quiet` workaround can go)
