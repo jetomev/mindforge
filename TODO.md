@@ -1,6 +1,6 @@
 # mindForge — the list
 
-**Current release: v0.1.10** (19 Oct 2026) — everything open except v0.2.0 (#44 #47 #28 #23 #25 #26 #30), the same evening as **v0.1.9**, the laptop batch (#65 #38 #15 #31 #18 #19 #21 #17 #20 #64 #66). Both: GitHub Release with signed files, v0.1.10 Latest. **AUR: 0.1.10-1 built locally and in a clean chroot, committed in `aur-mindforge` (two commits), NOT pushed** — waits for the maintainer's install test (`testing/20261019 - Test Matrix for mindForge v0-1-10.md`, part A); one push.
+**Current release: v0.1.10** (19 Oct 2026) — everything open except v0.2.0 (#44 #47 #28 #23 #25 #26 #30), the same evening as **v0.1.9**, the laptop batch (#65 #38 #15 #31 #18 #19 #21 #17 #20 #64 #66). Both: GitHub Release with signed files, v0.1.10 Latest. **AUR: 0.1.10-1 pushed (`968bcd9`) after the maintainer's install test** (`testing/20261019 - Test Matrix for mindForge v0-1-10.md`, part A, all pass).
 **Tests:** `bash testing/run-tests.sh`, 293 checks, all passing, 1 could not look on Linux (19 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
@@ -13,7 +13,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **v0.1.9** tagged `3a7dca3`, Release with signed files; five issues closed (#17 #18 #19 #20 #31), four commented and left open for the laptop (#15 #21 #38 #65); #66 opened (the recipe's license).
 - [x] **v0.1.10** tagged `1b0d75e`, Release Latest with signed files; seven issues closed (#23 #25 #26 #28 #30 #44 #47).
 - [x] **Clean-chroot builds** of 0.1.9-1 and 0.1.10-1 in the KognogOS VM: 258 and 293 checks pass; python comes in through the new checkdepends. Found on the way: nog F-20 #56 (`nog update` has no `--yes`).
-- [ ] **The maintainer's install test of 0.1.10-1** (matrix part A) → **then the one AUR push** → close #64 and #66.
+- [x] **The maintainer's install test of 0.1.10-1** passed 18:26–18:32 (part A, A9 = a fresh session's briefing with R1-R12) → **AUR 0.1.10-1 pushed `968bcd9`** (one push, with 0.1.9-1 `5ed2124`) → #64 and #66 closed. 12 issues open, all v0.2.0 or waiting for the laptop.
 - [ ] **The laptop's run** (the v0.1.9 matrix, part B, on 0.1.10) → closes #15 #21 #38 #65, or files W-15…
 - [ ] **R12 should skip `archive_index_*` files** like R4 and R7 do: an archived copy of a handoff file that still declares `rewritten_by: session` would be flagged forever (found 2026-10-19 while archiving the real one; the archive's line was removed by hand). Next version.
 - [ ] **The seven older vault notes** `mindforge scrub --vault` lists: the maintainer judges each; one cleared is added to its term's line in scope.txt.
