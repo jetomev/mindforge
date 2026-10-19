@@ -37,4 +37,6 @@ aren't listed.*
 
 ## The AUR recipe
 
+0.1.10-1: also installs `scope.example` with the other starting files (#23). No new programs: the vault scrub and the project brief use grep, awk, sed, paste and find.
+
 0.1.9-1: adds `checkdepends=('python')` (#64), and corrects `license` from GPL3 to **MIT**, which is what `LICENSE` and GitHub have always said (#66; the recipe was wrong since 0.1.7). The python optdepend now says what uses it: the tie alert.

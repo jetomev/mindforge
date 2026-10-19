@@ -4,7 +4,7 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **Extend the test suite to R1, R2 and the full brief.** 258 checks cover
+- [ ] **Extend the test suite to R1, R2 and the full brief.** 293 checks cover
       the closeout, the queue, session start, the headline, the scrub hook,
       the could-not-look paths and the Windows fixes. R2 and most of the full
       brief are still verified by hand against the 115-check matrix.

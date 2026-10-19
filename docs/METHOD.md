@@ -165,6 +165,13 @@ Both were genuine mistakes, made while being careful, by someone who had written
 the rule an hour earlier. That is the entire argument: **you cannot be careful
 enough, often enough, forever.**
 
+**Every boundary needs its guard, not only the commit.** A scoped persona name
+leaked a third time into the vault, which has no commits, so the pre-commit
+scrub could not see it (#23). `mindforge wrap` now runs the scope list
+(`scope.txt`: a term, and the paths where it belongs) over every vault note
+changed in the session, and the wrap is not clean while one names it out of
+scope. `mindforge scrub --vault` checks the whole vault.
+
 ---
 
 ## 8. Rot is silent
@@ -186,6 +193,89 @@ exceeded. Then add the rule that makes it stick:
 > a demand.**
 
 Otherwise you build a dashboard you learn to ignore.
+
+---
+
+## 9. A guard that only reports is a receipt
+
+A reset script once opened with a section headed *"prove there is nothing to
+lose"*. It counted the accounts, printed the count, took a dump — and dropped
+the database regardless. The count was 1. The account was the person's own, and
+the reset had never been needed. Both of us read the count as due diligence.
+It could not change the outcome: the number and the destruction scrolled past
+seconds apart (#26).
+
+> **If a script measures something to decide whether destruction is safe, the
+> measurement must gate the destruction.** Non-zero halts, and only an explicit
+> override goes on.
+
+Three rules for every script that destroys, resets or re-initialises:
+
+1. **Back up first**, and say where.
+2. **Gate on the measurement.** `[ "$n" -gt 0 ] && [ "${FORCE:-}" != yes ] && exit 1`.
+3. **Move aside, never delete.** `data` becomes `data.reset-<time>`. That habit is
+   the part that worked: the moved-aside folder is how the real cause was found
+   afterwards. Deleting would have left a guess.
+
+The same family as a scrub that fails open, or a check that cannot measure and
+says "clean" (section 8): a guard that reports instead of stopping makes a
+dangerous action feel safe. A template for this tier is in
+`templates/rules/scripts.md`.
+
+---
+
+## 10. A warning must arrive where it is needed
+
+Hours before a go-live, a decision record said, unprompted and correctly: the
+firewall that protected us tonight will block the website, until *two* separate
+things are done. The go-live script, written the same evening by the same
+session, did one of them. Certificates failed for forty minutes (#25).
+
+The warning was accurate, specific and in the right repository. It had no way
+to arrive at the moment it mattered: it was prose, waiting for a reader.
+
+> **A hazard you write down must become an assertion.** If the script can check
+> it, the script checks it and refuses to go on. If it cannot, it prints the
+> checklist and waits for a yes.
+
+Until a hazard is an assertion, write it as a line that starts with `HAZARD:` in
+the project's own docs. mindForge surfaces those lines where a session will see
+them: in the project's brief (`mindforge <project>`), and on demand with
+`mindforge hazards <project> <words>` — the words being what you are about to
+touch (`mindforge hazards webserver ufw caddy`).
+
+---
+
+## 11. Handoffs carry scope and facts, never method
+
+A handoff written on one machine for a session on another restated the sender's
+working method: one command per turn, never sudo. The receiving machine's own
+rules said the opposite, and it was Windows, where "never sudo" means nothing.
+The receiver caught it and followed its own rules (#30).
+
+The sender could not have checked. It cannot read the other machine's rules, so
+"check before exporting" is not a fix. The shape has to remove the mistake:
+
+> **A cross-machine handoff carries SCOPE** — what this session owns, what it must
+> not touch, what is blocked — **and FACTS** — what is true, with evidence: what
+> shipped, what is live, what failed, what is unverified. **Never WORKING
+> METHOD.** Method is already loaded on the receiving machine, is authoritative
+> there, and cannot be verified by the sender.
+
+`templates/handoff.md.template` has a Scope section and a Facts section and
+nowhere to put method. The L0 template says the receiver's own rules win.
+
+Two more lessons from the same morning (#28):
+
+- **A file that must be rewritten every session says so** —
+  `rewritten_by: session` in its frontmatter — and R12 holds it to that: a
+  declared file older than the last session's start is flagged, and a wrap that
+  leaves it untouched is not clean. A file that declares nothing is not checked,
+  and the brief says so out loud.
+- **Rewrite a handoff from a blank page; never append "it's live now" to the
+  bottom of it.** Of that morning's documents, the one written fresh was right,
+  and every edited one became two documents disagreeing with each other. The top
+  of a page is still read after the bottom changes.
 
 ---
 

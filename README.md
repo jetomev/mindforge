@@ -12,13 +12,13 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.9, seven weeks old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.10, seven weeks old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
 > fourteen defects of its own; with 0.1.9 every one has a fix, and the
 > Windows-only ones wait for that laptop's next run to be proven there. Its
-> **automated test suite** has 258 checks. Every check it makes
+> **automated test suite** has 293 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 true. Still: one user, and we publish early and say so.
 
@@ -78,11 +78,14 @@ One command per turn - intro, command, expected result, then stop.
 | Command | Does |
 |---|---|
 | `mindforge brief` | what is true right now — local only, no network |
+| `mindforge <project>` · `mindforge brief <project>` | **one project's brief** (0.1.10): its git state, the last session that named it, its queue line, its own `scripts/status.sh` (or its `TODO.md`'s open items), its hazards, the rot findings that name it, and one recommendation. Any case; a queue name or a folder name; an unknown name lists the known ones |
 | `mindforge wrap "<focus>" "<b1>\|<b2>"` | deliberate closeout that measures: uncommitted, unpushed, no remote, stale `TODO.md` — and says **clean** or **NOT clean**. Run it again in the same session to correct it |
 | `mindforge wrap --previous "<focus>" "<b1>\|<b2>"` | close the last session that ended without a wrap, keeping its own times |
 | `mindforge wip "<note>"` | leave an in-flight note for the next session — `--show`, `--clear` |
 | `mindforge drift "<what slipped>"` | log a drift observation with a timestamp |
 | `mindforge rot [--timings]` | the silent-failure checks, on their own; `--timings` says how long each rule took (0.1.9) |
+| `mindforge scrub --vault \| <file>...` | **scoped names where they do not belong** (0.1.10): every term in your private `scope.txt` is allowed only under the paths listed with it. `wrap` runs it over the vault notes changed in the session — the vault has no commits, so the commit scrub never saw it |
+| `mindforge hazards <project> [word...]` | **the hazards a project wrote down** (0.1.10): every line starting `HAZARD:` in its Markdown, filtered by what you are about to touch |
 | `mindforge hooks [--check \| --print]` | **are the hooks installed?** (0.1.9) — and `--print` gives the exact block to paste into `settings.json` for this platform (`--windows`, `--linux`). Hooks are installed by a person, by design: an assistant in auto mode is rightly not allowed to |
 | `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
 | `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. First hit: the reply goes back for a rewrite and you see the alert; second pass: alert only. `--check` reads a file instead |
@@ -110,7 +113,10 @@ parallel, so a cold start costs about a second, and offline at most one timeout.
 
 `wrap` does not take "done" on trust. It checks every repo for uncommitted
 files, unpushed commits and a missing remote, and flags a project that got
-commits this session while its `TODO.md` did not. A check that cannot run is
+commits this session while its `TODO.md` did not — and, since 0.1.10, shows the
+queue row of every project that got commits and asks *still true?* when
+`queue.md` was not touched; holds the every-session handoff file to its
+contract; and runs the scope list over the vault notes the session wrote. A check that cannot run is
 reported as **not verified**, never as a pass. Memory and vault changes are
 shown as facts, because when to write those is your call. Anything left open is
 stored with the session's row, and the next brief opens with it.
@@ -133,10 +139,11 @@ every brief:
 | R5 | the always-loaded tier over its 60-line budget |
 | R6 | the queue naming a project that is not on disk |
 | R7 | a memory index older than the files it describes |
-| R8 | the queue pointing at an issue that is already closed — checked against GitHub |
+| R8 | the queue pointing at an issue that is already closed — checked against GitHub; and a row saying a version shipped that is behind the project's newest tag, `-` rows included |
 | R9 | a memory index too big to load in full, which fails with no message at all |
 | R10 | the session hooks missing or switched off — without them nothing above runs by itself |
 | R11 | a project with recent commits but no line in the queue — so the brief cannot show it at all |
+| R12 | a memory file that declares `rewritten_by: session` and was not rewritten during the last session — the one-slot handoff that said "read this first" while hours behind |
 
 ---
 
@@ -162,7 +169,13 @@ cp ~/Programs/mindforge/always.example  ~/.claude/state/always.txt    # standing
 cp ~/Programs/mindforge/rules.example   ~/.claude/state/rules.txt     # rotating nudges
 cp ~/Programs/mindforge/persona.example ~/.claude/state/persona.txt   # scope boundary
 cp ~/Programs/mindforge/templates/queue.md.template ~/.claude/state/queue.md  # next task per project
+cp ~/Programs/mindforge/scope.example   ~/.claude/state/scope.txt     # where scoped names belong
 ```
+
+`templates/handoff.md.template` is the shape for a handoff to a session on
+another machine: scope and facts, and deliberately nowhere to put working method
+([METHOD.md §11](docs/METHOD.md)). `templates/rules/scripts.md` is an L1 file for
+scripts that destroy: back up, gate on the measurement, move aside (§9).
 
 Then edit `~/.claude/CLAUDE.md` — replace the `{{PLACEHOLDERS}}` with your own
 names and rules, and **keep it under 60 lines**. See
@@ -329,16 +342,20 @@ the version and changelog match, and the tests pass (#41).
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 258 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 293 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
 the release script, R11, the tie alert, the chime, the active project, one repo
 seen under two spellings of its path, the hooks command, the Windows memory
 folder, a config that tries to override a sandbox, a repo in a synced folder,
-and the "could not look" path of R3–R6 and R10 — and refuses to report green
+one project's brief, stale queue rows, the every-session handoff file, the vault
+scrub, hazards, and the "could not look" path of R3–R6 and R10 — and refuses to report green
 when nothing ran. A check that cannot be made on a machine (a folder link where
 Git Bash only copies, the PowerShell wrapper where there is no PowerShell) says
 *could not look* and is counted on its own, never as a pass. The run also fails
-if it leaves anything behind in the repo. A failing check prints the
+if it leaves anything behind in the repo. On 2026-10-19 the harness itself was
+found to hold twenty checks that claimed two conditions and proved one — written
+`check "x" [ A ] && [ B ]`, the `&& [ B ]` ran outside the check. Each now passes
+its whole condition in, and a planted check proves the second half counts. A failing check prints the
 first lines of what it looked at, so a report from another machine carries
 evidence, not just a verdict. R1, R2 and much of the full brief are still checked by hand
 against the 115-check matrix.

@@ -2,6 +2,61 @@
 
 Newest first.
 
+## v0.1.10 — 2026-10-19
+
+**Everything open except v0.2.0.** The per-project brief the maintainer asked
+for on 10-06, three silent failures made visible, and the method lessons from
+September written down where the next session will meet them. v0.1.9 fails
+**29 of this release's 293 checks**.
+
+- 🔭 **`mindforge <project>` — one project's brief (#44).** The full brief
+  reduced to one project: its git state, the last session whose focus names
+  it, its queue line, its own `scripts/status.sh` (or its `TODO.md`'s open
+  items), its hazards, the rot findings that name it, and one recommendation
+  (rot first, then a dirty tree, unpushed work, what it waits on, the queue's
+  next). Any case, a queue name or a folder name; an unknown name lists the
+  known ones. Also `mindforge brief <project>`.
+- 🕰 **Stale queue rows (#47).** R8 held only the issue in column 5 against
+  GitHub, so a `-` row was never looked at again (8 of 18 rows) and a row whose
+  issue was open passed while its sentence listed finished work. Now a version
+  the row says *shipped* is held against the project's newest tag — a monorepo
+  section by its own `<section>-vX.Y.Z` tags — on every row, `-` included; and
+  `wrap` shows the row of every project that got commits this session and, when
+  `queue.md` was not touched, asks *still true?* as an open item. Its first run
+  on the real queue found displayForge's row saying 1.1.0 while 1.1.1 was tagged
+  on 10-11.
+- 📝 **R12 — the every-session file (#28).** A memory file that declares
+  `rewritten_by: session` in its frontmatter is flagged when it was last
+  written before the last session began (a wrapped one, or one of 30 minutes;
+  Desktop's churn sessions do not count), and a wrap that leaves it untouched is
+  not clean. When no file declares the contract, the brief's State section says
+  so instead of passing silently — the bootstrap hole the issue's correction
+  named. The real handoff file now declares it.
+- 🧹 **The vault scrub (#23).** A scoped persona name leaked a third time into
+  the vault, which has no commits for the pre-commit scrub to guard. A private
+  `scope.txt` lists each term with the paths where it belongs; `wrap` checks
+  every vault note changed in the session and is not clean while one names a
+  term out of scope; a persona with no scope list is *not verified*.
+  `mindforge scrub --vault` checks the whole vault, one line per note and term.
+- ⚠️ **Hazards that surface (#25).** A line starting `HAZARD:` in a project's
+  Markdown appears in its brief, and `mindforge hazards <project> <words>`
+  lists the ones about what you are about to touch.
+- 📚 **The method, written down (#26, #30, #25, #28, #23).** METHOD.md §9 *a guard
+  that only reports is a receipt* (destructive scripts: back up, gate on the
+  measurement, move aside — and `templates/rules/scripts.md`), §10 *a warning must
+  arrive where it is needed*, §11 *handoffs carry scope and facts, never method*
+  (`templates/handoff.md.template` has nowhere to put method; the L0 template
+  says the receiving machine's rules win), and the vault as a boundary that
+  needs its own guard (§7).
+- 🧪 **The harness proved one condition where it claimed two.** Twenty checks
+  — eleven of them from 0.1.7 and 0.1.8 — were written `check "x" [ A ] && [ B ]`,
+  and the `&& [ B ]` ran outside the check, its answer thrown away. Each now
+  passes its whole condition in (`cond '…'`), and a planted check whose second
+  half is false proves it fails.
+
+Tests: 293 checks, 293 pass, 1 *could not look* on Linux (the PowerShell
+wrapper). Was 258.
+
 ## v0.1.9 — 2026-10-19
 
 **The laptop batch.** Everything the Windows laptop has reported and was still
