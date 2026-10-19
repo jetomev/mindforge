@@ -5,6 +5,9 @@ the AUR gets ONE push: 0.1.10-1, after part A passes. The automated suite passed
 (293 checks, 293 pass, 1 could not look: no PowerShell there) and in a clean Arch chroot.
 The laptop's part is in the v0.1.9 matrix (section B), run on 0.1.10.*
 
+**Every step calls `/usr/bin/mindforge`:** on this desktop a plain `mindforge` runs the repo copy
+(`~/.local/bin` comes first on PATH), which would pass these steps without testing the package at all.
+
 Mark each row ✅ pass · ❌ fail (paste what you saw) · — not applicable.
 
 ## A · Home PC — the locally built AUR package
@@ -12,13 +15,13 @@ Mark each row ✅ pass · ❌ fail (paste what you saw) · — not applicable.
 | # | Step | You should see | Result |
 |---|---|---|---|
 | A1 | in `~/Programs/aur-mindforge`: `nog install ./mindforge-0.1.10-1-any.pkg.tar.zst` | nog installs it, no errors | |
-| A2 | `mindforge --version` | `mindforge 0.1.10` | |
-| A3 | `mindforge brief` | the full brief; in State a `handoff` line naming `project_next_session_plan.md` | |
-| A4 | `mindforge hypeforge` | hypeForge's own brief: git, last session, queue line, its phase table, the rot check, one recommendation | |
-| A5 | `mindforge nosuchthing` | "not a command or a project I know", then the known projects | |
-| A6 | `mindforge scrub --vault` | the seven older vault notes, one line per note and name — judge them yourself; nothing is changed | |
-| A7 | `mindforge hooks` | `hooks: session-start and session-end are installed` | |
-| A8 | `mindforge rot --timings` | a `timing` line per rule (R1 … R12), then the rot result | |
+| A2 | `pacman -Q mindforge` then `/usr/bin/mindforge --version` | `mindforge 0.1.10-1`, then `mindforge 0.1.10` | |
+| A3 | `/usr/bin/mindforge brief` | the full brief; in State a `handoff` line naming `project_next_session_plan.md` | |
+| A4 | `/usr/bin/mindforge hypeforge` | hypeForge's own brief: git, last session, queue line, its phase table, the rot check, one recommendation | |
+| A5 | `/usr/bin/mindforge nosuchthing` | "not a command or a project I know", then the known projects | |
+| A6 | `/usr/bin/mindforge scrub --vault` | the seven older vault notes, one line per note and name — judge them yourself; nothing is changed | |
+| A7 | `/usr/bin/mindforge hooks` | `hooks: session-start and session-end are installed` | |
+| A8 | `/usr/bin/mindforge rot --timings` | a `timing` line per rule (R1 … R12), then the rot result | |
 | A9 | start a new Claude Code session | the briefing arrives as before, its rot line says `(R1-R12)` | |
 
 ## B · Work laptop
