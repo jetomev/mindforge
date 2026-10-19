@@ -80,7 +80,7 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 ---
 
 ## Waiting on a decision
-- [ ] **The terminal copy of the briefing (F-26)** never appears, in the terminal or in Desktop. Find out why, or delete it.
+- [x] **The terminal copy of the briefing (F-26)** — the maintainer: investigate or delete (2026-10-19). Found why: no controlling terminal (Desktop's processes show TT `?`, `/dev/tty` fails to open; a terminal's full-screen interface owns the screen). **Deleted**; in the Unreleased changelog.
 - [ ] **One GitHub issue per finding from the v0.1.2/v0.1.3 test round** — deliberately held back; still on hold.
 
 ## Known gaps (no issue yet)

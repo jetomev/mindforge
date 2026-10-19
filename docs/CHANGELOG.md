@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Unreleased
+
+- 🧹 **The terminal copy of the briefing is gone (F-26).** `session-start` wrote a
+  coloured copy to `/dev/tty`, and in seven weeks it never appeared. Under
+  Desktop, Claude Code runs with no controlling terminal (its processes show TT
+  `?`, and opening `/dev/tty` fails), and hooks inherit that. In a terminal,
+  the full-screen interface owns the screen. The briefing reaches the person the
+  way it always has: the directive makes the assistant render it.
+
 ## v0.1.10 — 2026-10-19
 
 **Everything open except v0.2.0.** The per-project brief the maintainer asked

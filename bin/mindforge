@@ -1037,21 +1037,13 @@ session_start() {
   printf '%s\t%s\n' "$(date +%F)" "$(date +%H:%M)" > "$(own_mark)"
   notify_headline
   # SessionStart stdout goes into the assistant's CONTEXT, not to the screen.
-  # To be visible to the human as well, write a coloured copy straight to the
-  # terminal. Silently skipped when there is no tty (SDK, CI, print mode).
-  # -w is not enough: /dev/tty can exist yet refuse to open (no controlling
-  # terminal). Probe by actually opening it, and stay silent if it fails.
-  # Best-effort visible copy, and terminal-only by nature. Proven absent on
-  # Claude Desktop 2026-08-29: its hook runner has no controlling terminal,
-  # the probe below fails, and the human sees nothing at launch. Still
-  # unproven inside a Claude Code terminal -- running `mindforge brief` by
-  # hand does not test this path, because that is a tty by definition.
-  # Parity therefore does NOT rest here. It rests on the DIRECTIVE below,
-  # which reaches the model identically on both surfaces. Treat anything
-  # this block prints as a bonus, never as the delivery mechanism.
-  if ( : > /dev/tty ) 2>/dev/null; then
-    ( FORCE_COLOUR=1 headline > /dev/tty ) 2>/dev/null || true
-  fi
+  # F-26 (removed 2026-10-19) · There used to be a coloured copy written to
+  # /dev/tty here. In seven weeks it never appeared, in Desktop or in a
+  # terminal: Claude Code runs with no controlling terminal under Desktop (the
+  # app's processes show TT "?", and opening /dev/tty fails), hooks inherit
+  # that, and in a terminal the full-screen interface owns the screen. The
+  # person sees the briefing because the DIRECTIVE below makes the assistant
+  # render it -- identically on both surfaces.
 
   # The context copy needs a DIRECTIVE, not just data. Injected context with
   # no instruction is inert: the first live test injected this briefing and
