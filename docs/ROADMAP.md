@@ -4,14 +4,14 @@ Newest first; Future at the top.
 
 ## Future
 
-- [ ] **Extend the test suite to R1, R2 and the full brief.** 146 checks cover
-      the closeout, the queue, session start, the headline, the scrub hook and
-      the could-not-look paths. R1, R2 and most of the full brief are still
-      verified by hand against the 115-check matrix.
-- [ ] **Windows as a supported platform.** Eight open findings from six weeks
-      on a Windows laptop (#15, #17–#21, #38, #46): install, paths, hooks under
-      auto mode, notifications, the PowerShell wrapper, the hook brief's
-      missing table.
+- [ ] **Extend the test suite to R1, R2 and the full brief.** 258 checks cover
+      the closeout, the queue, session start, the headline, the scrub hook,
+      the could-not-look paths and the Windows fixes. R2 and most of the full
+      brief are still verified by hand against the 115-check matrix.
+- [ ] **Windows as a supported platform — the laptop's proof.** With 0.1.9
+      every finding from the Windows laptop has a fix (#15, #17–#21, #38, #46,
+      #65), staged on Linux with stand-ins. Supported means the laptop's own
+      run is green, `could not look` aside.
 - [ ] **Stage 2 — the remote cache.** A scheduled collector for issue counts,
       published package versions and backup health, written to JSON. The brief
       reads the cache and **prints its age**, so it can never quietly go stale.

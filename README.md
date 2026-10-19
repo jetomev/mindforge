@@ -12,14 +12,15 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.8, six weeks old.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.9, seven weeks old.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
-> thirteen defects of its own; five are fixed, eight are open and listed in the
-> issues. Its **automated test suite** has 210 checks. Every check it makes
+> fourteen defects of its own; with 0.1.9 every one has a fix, and the
+> Windows-only ones wait for that laptop's next run to be proven there. Its
+> **automated test suite** has 258 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
-> true. Still: one user, and we publish early and say so.
+true. Still: one user, and we publish early and say so.
 
 ---
 
@@ -81,7 +82,8 @@ One command per turn - intro, command, expected result, then stop.
 | `mindforge wrap --previous "<focus>" "<b1>\|<b2>"` | close the last session that ended without a wrap, keeping its own times |
 | `mindforge wip "<note>"` | leave an in-flight note for the next session — `--show`, `--clear` |
 | `mindforge drift "<what slipped>"` | log a drift observation with a timestamp |
-| `mindforge rot` | the silent-failure checks, on their own |
+| `mindforge rot [--timings]` | the silent-failure checks, on their own; `--timings` says how long each rule took (0.1.9) |
+| `mindforge hooks [--check \| --print]` | **are the hooks installed?** (0.1.9) — and `--print` gives the exact block to paste into `settings.json` for this platform (`--windows`, `--linux`). Hooks are installed by a person, by design: an assistant in auto mode is rightly not allowed to |
 | `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
 | `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. First hit: the reply goes back for a rewrite and you see the alert; second pass: alert only. `--check` reads a file instead |
 | `mindforge chime [--test]` | **a sound when the assistant is done and waiting** (0.1.7), so you hear it from the next room. From the Stop and Notification hooks; silent when there is no player or sound file |
@@ -146,6 +148,7 @@ From the AUR (since 2026-10-09): `yay -S mindforge`. The command lands in `/usr/
 
 ```bash
 git clone https://github.com/jetomev/mindforge.git ~/Programs/mindforge
+mkdir -p ~/.local/bin ~/.config/mindforge ~/.claude/state
 ln -s ~/Programs/mindforge/bin/mindforge ~/.local/bin/mindforge
 cp ~/Programs/mindforge/config.example ~/.config/mindforge/config   # edit paths
 cp ~/Programs/mindforge/templates/CLAUDE.md.template ~/.claude/CLAUDE.md
@@ -165,7 +168,23 @@ Then edit `~/.claude/CLAUDE.md` — replace the `{{PLACEHOLDERS}}` with your own
 names and rules, and **keep it under 60 lines**. See
 [`templates/rules/_ABOUT.md`](templates/rules/_ABOUT.md) for the L1 tier.
 
-To wire the hooks, add to `~/.claude/settings.json`:
+**The hooks are the one step a person does, always** (#19). They run commands at
+every session start and end, so Claude Code's auto mode does not let the
+assistant add them — rightly. mindForge prints the exact block for your
+platform, you paste it, and it checks the result:
+
+```bash
+mindforge hooks --print
+```
+
+Merge its `"hooks"` part into `~/.claude/settings.json` (keep any hooks already
+there), then:
+
+```bash
+mindforge hooks --check
+```
+
+On Linux the block looks like this:
 
 ```json
 { "hooks": {
@@ -190,6 +209,43 @@ To wire the hooks, add to `~/.claude/settings.json`:
 `Stop` and `Notification` are the 0.1.7 pair: the tie alert and the chime. `mindforge active`
 (0.1.8) is the active project's banner, for projects that carry a `scripts/status.sh`. All
 three are optional; the brief does not count them as missing.
+
+### On Windows (Git Bash)
+
+In daily use since September on a Windows 11 laptop with
+[Git for Windows](https://gitforwindows.org/), which brings bash and every tool
+the script uses (`date -d`, `stat -c`, `find -printf`). The differences, each
+found there (#17). The 0.1.9 fixes among them are proven here with stand-ins and
+wait for that laptop's next run to be proven on Windows itself:
+
+- **No `ln -s`.** Without Developer Mode, Git Bash's `ln -s` makes a *copy*,
+  which goes stale at the next `git pull`. Use a two-line wrapper instead:
+
+  ```bash
+  mkdir -p ~/bin ~/.config/mindforge ~/.claude/state
+  printf '#!/usr/bin/env bash\nexec bash "$HOME/Programs/mindforge/bin/mindforge" "$@"\n' > ~/bin/mindforge
+  ```
+
+- **The hooks need `"shell": "bash"` and a full path**, because Claude Code runs
+  hook commands in PowerShell there. `mindforge hooks --print` writes them that
+  way on Windows (or anywhere, with `--windows`).
+- **From PowerShell, use `bin/mindforge.ps1`** (#21), never a `.cmd` wrapper: a
+  `.cmd` pastes the arguments into one string, so `wrap 'a focus' 'b1|b2'` lost
+  every word after the first and cmd.exe ran `|` as a pipe. In your PowerShell
+  profile: `Set-Alias mindforge "$HOME\Programs\mindforge\bin\mindforge.ps1"`.
+  PowerShell 7 passes every argument intact; Windows PowerShell 5.1 can still
+  mangle a `"` *inside* an argument.
+- **The memory folder is found by itself** (#15, 0.1.9): Claude Code names it
+  after the Windows spelling of your home (`C--Users-you`), and mindForge now
+  does too. `MINDFORGE_MEMORY` still overrides it.
+- **Project roots in Git Bash's spelling**, `/c/Users/you/Programs`: roots are
+  separated by `:`, so `C:/…` would split in two. A repo inside a synced folder
+  (Dropbox, OneDrive) can be listed **directly** as a root, spaces and
+  apostrophes included (#18) — no junction needed.
+- **No desktop notification** (#20): the launch popup uses `notify-send`, which
+  Windows does not have. The hook quietly skips it; the briefing itself
+  is unaffected. The chime needs one of `paplay`, `pw-play`,
+  `canberra-gtk-play`, `aplay` or `afplay`, so on Windows it is silent too.
 
 ### The tie alert — why a hook and not a rule
 
@@ -273,11 +329,16 @@ the version and changelog match, and the tests pass (#41).
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 210 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 258 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
 the release script, R11, the tie alert, the chime, the active project, one repo
-seen under two spellings of its path, and the "could not look" path of R3–R6 and
-R10 — and refuses to report green when nothing ran. A failing check prints the
+seen under two spellings of its path, the hooks command, the Windows memory
+folder, a config that tries to override a sandbox, a repo in a synced folder,
+and the "could not look" path of R3–R6 and R10 — and refuses to report green
+when nothing ran. A check that cannot be made on a machine (a folder link where
+Git Bash only copies, the PowerShell wrapper where there is no PowerShell) says
+*could not look* and is counted on its own, never as a pass. The run also fails
+if it leaves anything behind in the repo. A failing check prints the
 first lines of what it looked at, so a report from another machine carries
 evidence, not just a verdict. R1, R2 and much of the full brief are still checked by hand
 against the 115-check matrix.

@@ -19,9 +19,22 @@ aren't listed.*
 |---|---|---|
 | github-cli | issues and the repo watch (gh) | (program gh) |
 | libnotify | desktop messages | (program notify-send) |
-| python | the tone hook | (program python3) |
+| python | the tie alert, `mindforge tone` (it tries python3, python, `py -3`) | (program python3) |
 | libpulse or pipewire | the chime (paplay or pw-play; it tries five players) | (programs) |
+
+## Needed to run the tests (`checkdepends`)
+
+| Package | Why |
+|---|---|
+| python | the recipe's `check()` runs `testing/run-tests.sh`, and its tie-alert checks need a python that runs (#64). Until 0.1.9 the recipe did not ask for it, and the clean-chroot build passed only because something else pulled python in |
+
+## Windows only (not packaged)
+
+| Program | What uses it |
+|---|---|
+| cygpath (Git for Windows) | the memory folder's name (#15) and the tie alert's transcript path (#65); absent elsewhere, and nothing needs it there |
+| PowerShell 7 | `bin/mindforge.ps1`, the PowerShell wrapper (#21) |
 
 ## The AUR recipe
 
-Matches the AUR recipe 0.1.7-1. Nothing to change.
+0.1.9-1: adds `checkdepends=('python')` (#64), and corrects `license` from GPL3 to **MIT**, which is what `LICENSE` and GitHub have always said (#66; the recipe was wrong since 0.1.7). The python optdepend now says what uses it: the tie alert.

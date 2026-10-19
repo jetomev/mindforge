@@ -17,7 +17,7 @@ _mf_env=$(declare -px 2>/dev/null | grep -E '^declare -x (MINDFORGE_[A-Za-z0-9_]
 [ -n "$_mf_env" ] && eval "$_mf_env"
 unset _mf_env
 
-VERSION="0.1.8"
+VERSION="0.1.9"
 STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
 PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"   # colon-separated, PATH-style
 # Claude Code encodes the working directory into the memory path: every

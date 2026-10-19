@@ -2,8 +2,74 @@
 
 Newest first.
 
-## Unreleased
+## v0.1.9 — 2026-10-19
 
+**The laptop batch.** Everything the Windows laptop has reported and was still
+open, plus two findings from the home PC. On Linux the new checks are staged
+with stand-ins (a `cygpath` that answers like Git Bash's, an `ln` that copies
+like Git Bash's); the laptop's next run is the proof on Windows itself.
+v0.1.8 fails **31 of this release's 258 checks** on Linux; under an `ln` that
+copies like Git Bash's, it fails 43 (the old `release.sh` adds 12).
+
+- 🪟 **The test suite on Windows (#65, W-14).** The laptop ran 0.1.8 at 197 of
+  218, and twenty of the 21 failures were the harness, not the tool:
+  - Git Bash's `ln -s` *copies*. `release.sh` linked its `-latest` log to a file
+    that did not exist yet, the copy failed, and `set -e` ended the run on its
+    first line — the eleven release failures #43 could not explain. Where a
+    real link can be made, `-latest` is a link; elsewhere a copy of the log,
+    written when the run ends. Reproduced on Linux with an `ln` that copies:
+    the old script fails 12 checks, the new one none.
+  - The two-spellings checks need a real folder link. The harness now tries
+    `ln -s`, native Windows links and a junction, proves the link by looking
+    through it, and otherwise says **could not look** — counted on its own,
+    never as a pass or a failure.
+  - The tie alert got a transcript path in Git Bash's spelling (`/tmp/…`),
+    which a Windows python cannot open, so it stayed silent. `tone` now asks
+    `cygpath` for a spelling python can open, which protects any caller.
+  - A Windows program started under `env -i` wrote a `%SystemDrive%` folder
+    into the repo. The variables Windows needs now go through every `env -i`,
+    the run happens from a scratch folder, and **a run that leaves anything in
+    the repo fails**, naming what it left (proven with a planted folder).
+  - The active-project pointer was saved in two spellings: git's from `wrap`,
+    Git Bash's from `mindforge active <path>`. Both now store git's.
+- ⏱ **`mindforge rot --timings` (#38, W-10).** The laptop's `rot` took ten
+  seconds and the report could only say "slow". Each rule's time now prints to
+  stderr. The two memory rules did one process per memory file (R4 a grep, R7 a
+  stat; 112 files here) and now do one pass each, and the repo list is built
+  once per run instead of once per section: `rot` went from 0.9 s to 0.6 s here,
+  and process starts are what Windows is slow at. The parallel-lookup check no
+  longer measures the machine: it times the same `rot` with an instant tracker
+  first, allows the three 2-second lookups 4 seconds on top, and prints both
+  numbers.
+- 🧠 **The memory folder on Windows (#15, W-1).** Claude Code names it after the
+  Windows spelling of home, `C:\Users\you` → `C--Users-you`, replacing every
+  character that is not a letter or a digit. mindForge derived `-c-Users-you`
+  and found nothing. It now uses `cygpath -w` where it exists and the same
+  rule everywhere — which also fixes a Linux home with a dot in it. A memory
+  folder that is not there is named in the brief, not counted as 0 files.
+- 🔒 **An explicit export beats the config (#31, S-9).** The config was sourced
+  first and simply assigned, so a sandboxed run on the home PC still wrote to
+  the real vault — the one thing its config set. Whatever the environment
+  already carries is now put back after the config runs.
+- 📁 **A repo in a synced folder (#18, W-4).** A repo can be listed directly as a
+  project root, spaces and apostrophes in its path included; no junction.
+  R1 and R2 split a root with a space in it into pieces and skipped it in
+  silence — they now read it whole.
+- 🪝 **`mindforge hooks --print | --check` (#19, W-5).** Auto mode rightly will
+  not let the assistant add hooks, so the install is built around that: the
+  person pastes the block mindForge prints for their platform (`"shell":
+  "bash"` and a full path on Windows), and `--check` says whether it took.
+- 💬 **`bin/mindforge.ps1`, the PowerShell wrapper (#21, W-7).** Every argument
+  reaches bash whole — `wrap 'a focus' 'b1|b2'` used to lose everything after
+  the first word, and cmd.exe ran the `|` as a pipe. Its check runs where
+  PowerShell is and says *could not look* elsewhere.
+- 📖 **Windows install, written down (#17, W-3; #20, W-6).** A Windows section in
+  the README: the wrapper instead of `ln -s`, the hooks, the PowerShell
+  wrapper, roots in Git Bash's spelling, and that notifications and the chime
+  are Linux-only for now.
+- 📦 **The AUR recipe (#64).** `checkdepends=('python')`, since `check()` runs
+  the tie-alert tests; and its `license` said GPL3 while mindForge has always
+  been **MIT** — corrected (#66).
 - 📏 **The brief's NEXT column follows the terminal (#46, W-12).** It was cut at 42
   characters, mid-word, so every row lost the half that said what to do. Its width
   is now the terminal's minus the other columns (`COLUMNS`, else `tput cols`); off
@@ -15,6 +81,11 @@ Newest first.
   and its directive tells the assistant to run and render the full brief when the
   person asks for projects, status or the brief — a session once took the short one
   for the whole and the person asked "where is the project table and status?".
+- 📌 **`mindforge active <project>` prints the project's summary too**, so
+  switching to a project always shows it (the maintainer, 2026-10-17).
+
+Tests: 258 checks, 258 pass, 1 *could not look* on Linux (the PowerShell
+wrapper). Was 218.
 
 ## v0.1.8 — 2026-10-12
 
