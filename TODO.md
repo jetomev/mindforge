@@ -15,6 +15,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **Clean-chroot builds** of 0.1.9-1 and 0.1.10-1 in the KognogOS VM: 258 and 293 checks pass; python comes in through the new checkdepends. Found on the way: nog F-20 #56 (`nog update` has no `--yes`).
 - [x] **The maintainer's install test of 0.1.10-1** passed 18:26–18:32 (part A, A9 = a fresh session's briefing with R1-R12) → **AUR 0.1.10-1 pushed `968bcd9`** (one push, with 0.1.9-1 `5ed2124`) → #64 and #66 closed. 12 issues open, all v0.2.0 or waiting for the laptop.
 - [ ] **The laptop's run** (the v0.1.9 matrix, part B, on 0.1.10) → closes #15 #21 #38 #65, or files W-15…
+- [ ] **#67** · `wrap --previous` closed a 2-minute churn row (the maintainer's A9 test session) instead of the 17:43–18:32 session the brief named (found 2026-10-19 18:36; repaired with `log --drop-last`). Shape: print the row before closing it, refuse one shorter than 30 min unless `--row <date> <start>` names it. Next version.
 - [ ] **R12 should skip `archive_index_*` files** like R4 and R7 do: an archived copy of a handoff file that still declares `rewritten_by: session` would be flagged forever (found 2026-10-19 while archiving the real one; the archive's line was removed by hand). Next version.
 - [ ] **The seven older vault notes** `mindforge scrub --vault` lists: the maintainer judges each; one cleared is added to its term's line in scope.txt.
 
