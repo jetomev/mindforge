@@ -45,6 +45,9 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 - [ ] **#19** · Auto mode will not let the assistant install hooks — the install has to be designed around that.
 - [ ] **#20** · Desktop notifications are Linux-only, and that isn't documented.
 - [ ] **#21** · The PowerShell wrapper breaks quoted text, so `wrap` and `drift` record the wrong thing.
+- [ ] **#65** · W-14 (laptop, 2026-10-19): 0.1.8's suite is 197/218 there, almost all the test harness on Windows — Git Bash's `ln -s` makes a copy (12, incl. the release.sh mystery from #43), MSYS paths reach Windows python (tone ×7), a test leaves a `%SystemDrive%` folder in the repo, the active pointer saved in two spellings (1, a real small one). The live tool runs clean.
+- [ ] **#38** · W-10: the parallel-lookup timing check fails on the laptop every run (still failing in #65).
+- [ ] **#64** · The PKGBUILD: python belongs in `checkdepends`, since `check()` runs the tie-alert tests.
 - [x] **#34** · The same project is counted twice on Windows — fixed in 0.1.8 with #43 (same cause).
 
 - [x] **#43** · W-11: fixed in 0.1.8 (the R11 part). The eleven `release.sh` failures on the laptop are still unexplained — the harness now prints what a failing check saw, so the next laptop run can tell us.
