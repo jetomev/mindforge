@@ -54,17 +54,17 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 
 ### 1b · Asked by the maintainer (2026-10-06)
 - [x] **#45** · `mindforge tone` (the tie alert, a Stop hook) and `mindforge chime` — shipped in v0.1.7 the same day. Design fix, not a reminder: the tone rule had lost to the app's built-in report style all afternoon
-- [ ] **#44** · `mindforge <project>` — the brief, reduced to one project or initiative (header, phase table + NEXT items with comments, its queue and rot lines, a recommendation). Today the command prints the usage text.
+- [x] **#44** · `mindforge <project>` — the brief, reduced to one project or initiative (header, phase table + NEXT items with comments, its queue and rot lines, a recommendation). Today the command prints the usage text. **— fixed in 0.1.10: `mindforge <project>` / `brief <project>`.**
 
 ### 2 · Lessons about the method (mostly writing, some design)
-- [ ] **#23** · The scoped persona leaked a third time, through the vault, which the commit check cannot reach.
-- [ ] **#25** · A warning written in a decision document does not reach the script that needs it.
-- [ ] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway.
-- [ ] **#28** · The one-slot handoff note is maintained by nothing — the same failure as the old queue file.
+- [x] **#23** · The scoped persona leaked a third time, through the vault, which the commit check cannot reach. **— fixed in 0.1.10: `scope.txt` + the vault scrub in wrap + `mindforge scrub --vault`.**
+- [x] **#25** · A warning written in a decision document does not reach the script that needs it. **— fixed in 0.1.10: `HAZARD:` lines in the project brief + `mindforge hazards`; METHOD §10.**
+- [x] **#26** · A script counted what it would destroy, printed it, and destroyed it anyway. **— fixed in 0.1.10: METHOD §9 + `templates/rules/scripts.md`.**
+- [x] **#28** · The one-slot handoff note is maintained by nothing — the same failure as the old queue file. **— fixed in 0.1.10: R12 + wrap, `rewritten_by: session` declared on the real handoff file.**
 - [x] **#37** · S-10: the active-project banner — `mindforge active` in 0.1.8.
 - [x] **#46** · W-12: the brief's NEXT column cut at 42 characters mid-word, and the hook's short brief didn't say it was short — fixed 2026-10-13 (width follows the terminal, cut at a word with …, nothing cut off a terminal; the hook brief names what it leaves out and the directive says to run the full one when asked). Unreleased.
-- [ ] **#47** · R8 cannot see stale queue rows: 8 of 18 rows opt out with `-` and are never checked again, and a row whose reference is still open passes even when its sentence lists finished work (found 2026-10-08: forgekit said 0.8.0, hypeForge listed done jobs). Ideas: compare a row's "X.Y.Z shipped" with the newest tag; `wrap` asks "still true?" for every project touched.
-- [ ] **#30** · A relayed handoff carried one machine's way of working to another.
+- [x] **#47** · R8 cannot see stale queue rows: 8 of 18 rows opt out with `-` and are never checked again, and a row whose reference is still open passes even when its sentence lists finished work (found 2026-10-08: forgekit said 0.8.0, hypeForge listed done jobs). Ideas: compare a row's "X.Y.Z shipped" with the newest tag; `wrap` asks "still true?" for every project touched. **— fixed in 0.1.10: R8 checks shipped versions against tags on every row; wrap asks about the rows of projects with commits.**
+- [x] **#30** · A relayed handoff carried one machine's way of working to another. **— fixed in 0.1.10: METHOD §11, `templates/handoff.md.template`, the L0 template line.**
 - [x] **#31** · The sandbox advice — an explicit export now beats the config (vault included), tested both ways, 0.1.9.
 
 ---
@@ -76,7 +76,7 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 ## Known gaps (no issue yet)
 - [x] ~~The rot checks only look at projects the queue names.~~ **Closed by R11 in v0.1.6 (#39):** a repo with commits in the last 14 days and no queue line is named; `@quiet` is the visible opt-out. Found when the queue sat untouched from 29 Sep to 1 Oct and hypeForge, worked on all four days, never appeared in the brief
 - [x] ~~A queue name longer than 20 characters pushes its row out of line~~ **Fixed in v0.1.6 (#40)**
-- [ ] **R11's first real finding, for the maintainer:** `homelab` (commits 28 Sep) has no queue line. Add it with its next step, or put it on an `@quiet` line
+- [x] **R11's first real finding:** `homelab` had no queue line — **it has one now** (checked 2026-10-19).
 
 ## R11 false alarm (2026-10-01)
 - [x] **#42 · fixed in 0.1.8** (the twin rule strips `python-` too, and matches the queue's names, so a monorepo sub-project's twin counts). Was: **AUR twins whose package name differs from the repo name are not matched.** R11 named `aur-python-forgekit` (commits that day) because the twin rule strips `aur-` and looks for a queue repo called `python-forgekit`; the project is `forgekit`. Options: a `@twin aur-python-forgekit forgekit` directive, or read `pkgname`/`url` from the twin's PKGBUILD. Until then, `@quiet aur-python-forgekit` is the visible workaround (**in the queue since 2026-10-01 evening; issue #42**)

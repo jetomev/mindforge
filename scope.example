@@ -1,0 +1,11 @@
+# Copy to $MINDFORGE_STATE/scope.txt (default ~/.claude/state/scope.txt). Private: never commit it.
+# mindforge wrap checks every vault note changed in the session against it, and
+# `mindforge scrub --vault` checks the whole vault (#23).
+#
+# One line per name: <term> TAB <path part>|<path part>|...
+# The term is fine only in a note whose path contains one of the parts
+# (case-insensitive). A note that is fine where it is (one that talks ABOUT the
+# rule, say) can be added as its own part.
+#
+# Example: a persona name that belongs to two projects only
+# Aldric	My-Novel|The-Game

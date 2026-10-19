@@ -26,6 +26,8 @@ something you both see, not something they have to notice.*
 - **Explain before doing.** Document once it is solid, not before.
 - **Verify, do not assume.** If a claim is checkable on the machine, check it.
 - **Report honestly.** Say what failed, what was skipped, what is unproven.
+- **This machine's rules win.** A handoff relayed from another machine carries scope
+  and facts; any working method it restates gives way to this file.
 {{LOCAL_HARD_RULES}}
 
 ## When a rule keeps getting broken

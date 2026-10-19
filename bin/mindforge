@@ -452,6 +452,16 @@ full() {
   else
     printf '  memory     %snot found at %s -- set MINDFORGE_MEMORY in the config%s\n' "$R" "$MEM" "$O"
   fi
+  # #28 · said out loud when no file declares the contract: a check with
+  # nothing to check must not read as a pass (#24).
+  local hfs; hfs=$(handoff_files)
+  if [ -z "$hfs" ]; then
+    printf '  handoff    %sno memory file declares rewritten_by: session -- R12 has nothing to check%s\n' "$D" "$O"
+  else
+    while IFS= read -r f; do
+      printf '  handoff    %s, written %s\n' "$(basename "$f")" "$(date -r "$f" '+%Y-%m-%d %H:%M')"
+    done <<<"$hfs"
+  fi
   printf '  L0         %s/60 lines\n' "$(grep -c '' "$HOME/.claude/CLAUDE.md" 2>/dev/null || echo 0)"
   printf '  L1         %s domains\n' "$(ls "$HOME"/.claude/rules/*.md 2>/dev/null | wc -l)"
   if [ -n "$VAULT" ] && [ -d "$VAULT" ]; then
@@ -573,6 +583,44 @@ prefetch_refs() {
     queue_ref_state "$repo" "${ref#\#}" >/dev/null &
   done < <(queue_lines)
   wait
+}
+
+# #28 · A file that must be rewritten every session declares it, in its
+# frontmatter: `rewritten_by: session`. The one-slot handoff carried "read this
+# first" while 2h 51m behind the machine, through two wraps, because nothing
+# held it to that contract -- R7 compares timestamps against MEMORY.md, not
+# against the session. These are the files that declare it.
+handoff_files() {
+  [ -d "$MEM" ] || return 0
+  grep -lE '^[[:space:]]*rewritten_by:[[:space:]]*session[[:space:]]*$' "$MEM"/*.md 2>/dev/null
+}
+# The start ("YYYY-MM-DD HH:MM") of the last session that counts: a wrapped one,
+# or one that lasted MINDFORGE_HANDOFF_MIN minutes (30) -- Desktop's short
+# churn sessions are not expected to rewrite anything.
+last_real_session_start() {
+  awk -F'\t' -v min="${MINDFORGE_HANDOFF_MIN:-30}" '
+    /^#/ || NF < 6 { next }
+    { split($2, a, ":"); split($3, b, ":")
+      d = (b[1]*60 + b[2]) - (a[1]*60 + a[2]); if (d < 0) d += 1440
+      if ($6 == "wrapped" || d >= min) last = $1 " " $2 }
+    END { if (last) print last }' "$STATE/sessions.log" 2>/dev/null
+}
+
+# The newest release version of the project in <dir>: a monorepo section tags
+# <section>-vX.Y.Z (forge-suite's forgekit-v0.9.0), a plain repo vX.Y.Z.
+newest_tag_version() {
+  local d="$1" base pre tags
+  base=$(basename "$d")
+  tags=$(git -C "$d" tag --list "$base-v*" 2>/dev/null)
+  if [ -n "$tags" ]; then pre="$base-v"
+  else
+    # a section of a monorepo with no tags of its own has no release yet
+    pre=$(git -C "$d" rev-parse --show-prefix 2>/dev/null) || return 1
+    [ -z "$pre" ] || return 1
+    tags=$(git -C "$d" tag --list 'v[0-9]*' '[0-9]*' 2>/dev/null); pre=""
+  fi
+  [ -n "$tags" ] || return 1
+  sed -e "s/^$pre//" -e 's/^v//' <<<"$tags" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 | grep .
 }
 
 # #38 · Where does the time go? On the work laptop `rot` took ten seconds and
@@ -756,6 +804,26 @@ rot_checks() {
       printf 'R8\tgh is not on PATH -- no queue entry was checked\n'
   fi
 
+  # R8, second half (#47) · a row can be wrong while its reference is open, or
+  # carry no reference at all ("-"): 8 of 18 rows did, and nothing ever looked
+  # at them again. forgekit's row said "0.8.0 shipped" two days after 0.9.0. A
+  # version the row says shipped is held against the project's newest tag --
+  # every row, "-" rows included. Local, no network. (The sentence-level drift
+  # is caught at wrap time: a project with commits gets its row shown.)
+  if [ -r "$STATE/queue.md" ]; then
+    local said newest d
+    while IFS=$'\t' read -r proj next _; do
+      case "$proj" in \#*|@*|"") continue;; esac
+      said=$(grep -oiE '\bv?[0-9]+\.[0-9]+\.[0-9]+\b[^;,|]{0,12}\b(shipped|released|is out|out|live)\b' <<<"$next" \
+             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+      [ -n "$said" ] || continue
+      d=$(proj_dir "$proj") || continue
+      newest=$(newest_tag_version "$d") || continue
+      [ "$(printf '%s\n%s\n' "$said" "$newest" | sort -V | tail -1)" = "$said" ] && continue
+      printf 'R8\tqueue row for %s says %s shipped, but its newest tag is %s -- the row is behind\n' "$proj" "$said" "$newest"
+    done < <(queue_lines)
+  fi
+
   lap 'R11'
   # R11 · active work the queue does not name (#39).
   # R6 asks whether each queue line points at something real; R8 whether its
@@ -845,6 +913,19 @@ rot_checks() {
     [ "$sz" -gt "$MEMORY_MAX" ] && \
       printf 'R9\tMEMORY.md is %s bytes, past the %s-byte budget -- part of the index may already be silently dropped; compact it\n' \
         "$sz" "$MEMORY_MAX"
+  fi
+
+  # R12 · a file that declares it is rewritten every session, and was not (#28)
+  lap 'R12'
+  local hf since_s since_e
+  since_s=$(last_real_session_start)
+  if [ -n "$since_s" ] && since_e=$(date -d "$since_s" +%s 2>/dev/null); then
+    while IFS= read -r hf; do
+      [ -n "$hf" ] || continue
+      [ "$(stat -c %Y "$hf")" -lt "$since_e" ] && \
+        printf 'R12\t%s is rewritten every session, but was last written %s -- before the last session began (%s); read it as stale until it is rewritten\n' \
+          "$(basename "$hf")" "$(date -r "$hf" '+%Y-%m-%d %H:%M')" "$since_s"
+    done < <(handoff_files)
   fi
   lap end
 }
@@ -985,7 +1066,7 @@ session_start() {
   # moment is session start. It had two callers, both typed by a human, so it
   # ran only when someone already suspected a problem: an R7 finding was true
   # all night and reached nobody. Now it runs here, every session.
-  echo "rot check (R1-R11):"
+  echo "rot check (R1-R12):"
   rot
   echo "</session-briefing>"
   cat <<'DIRECTIVE'
@@ -1121,6 +1202,28 @@ wrap_checks() {
   [ "$n" -eq 0 ] && c_unk "no repos found under $PROJECTS"
   [ -z "$since" ] && c_unk "session start unknown -- TODO.md, memory and vault coverage"
 
+  # #47 · The moment a queue row goes stale is the session that finished its
+  # work. Every project that got commits this session has its row shown; if
+  # queue.md was not touched since the session began, the wrap asks whether
+  # the row is still true -- an open item until it is edited.
+  if [ -n "$since" ] && [ -r "$STATE/queue.md" ]; then
+    local qtouched=0 proj next pd pg pre nc
+    [ -n "$(find "$STATE/queue.md" -newermt "$since" 2>/dev/null)" ] && qtouched=1
+    while IFS=$'\t' read -r proj next _; do
+      case "$proj" in \#*|@*|"") continue;; esac
+      pd=$(proj_dir "$proj") || continue
+      pg=$(governing_repo "$pd") && [ -n "$pg" ] || continue
+      pre=$(git -C "$pd" rev-parse --show-prefix 2>/dev/null)
+      nc=$(git -C "$pg" log --since="$since" --format=%H -- ${pre:+"$pre"} 2>/dev/null | grep -c .)
+      [ "$nc" -gt 0 ] || continue
+      if [ "$qtouched" -eq 1 ]; then
+        c_info "queue: $proj -- $next"
+      else
+        c_open "queue: $proj got $nc commit(s) this session and its row still says \"$next\" -- still true? (edit queue.md)"
+      fi
+    done < <(queue_lines)
+  fi
+
   if [ -n "$since" ]; then
     if [ -d "$MEM" ]; then
       c=$(find "$MEM" -maxdepth 1 -type f -newermt "$since" 2>/dev/null | grep -c .)
@@ -1133,10 +1236,37 @@ wrap_checks() {
       if [ -d "$VAULT" ]; then
         c=$(find "$VAULT" -type f -newermt "$since" 2>/dev/null | grep -c .)
         c_info "vault: $c file(s) changed this session"
+        # #23 · the vault has no commit boundary, so the scrub runs here
+        if [ -r "$SCOPE" ]; then
+          local vf=() vh rel
+          mapfile -d '' -t vf < <(find "$VAULT" -type f -name '*.md' -newermt "$since" -print0 2>/dev/null)
+          vh=$(scope_hits "$VAULT" "${vf[@]}")
+          if [ -n "$vh" ]; then
+            while IFS= read -r rel; do
+              c_open "vault: $rel names $(awk -F'\t' -v r="$rel" '$1==r{print $3}' <<<"$vh" | sort -u | paste -sd, -) outside its scope (mindforge scrub --vault)"
+            done < <(cut -f1 <<<"$vh" | sort -u)
+          elif [ ${#vf[@]} -gt 0 ]; then
+            c_ok "vault: no scoped name out of its scope in the ${#vf[@]} note(s) changed"
+          fi
+        elif [ -r "$STATE/persona.txt" ] && grep -qvE '^[[:space:]]*(#|$)' "$STATE/persona.txt"; then
+          c_unk "vault: a persona is scoped (persona.txt) but there is no scope.txt, so the vault notes were not checked for it"
+        fi
       else
         c_unk "vault folder not found at $VAULT"
       fi
     fi
+  fi
+  # #28 · the other end: a wrap that leaves the every-session file untouched is not clean.
+  if [ -n "$since" ]; then
+    local hf
+    while IFS= read -r hf; do
+      [ -n "$hf" ] || continue
+      if [ -n "$(find "$hf" -newermt "$since" 2>/dev/null)" ]; then
+        c_ok "$(basename "$hf") rewritten this session"
+      else
+        c_open "$(basename "$hf") is rewritten every session, and this one has not rewritten it"
+      fi
+    done < <(handoff_files)
   fi
   [ -r "$STATE/wip.md" ] && c_info "in-flight note cleared by this wrap: $(cut -f2 "$STATE/wip.md")"
   return 0
@@ -1625,6 +1755,211 @@ active() {
   bash "$p/scripts/status.sh"
 }
 
+# ── scrub · scoped names where they do not belong (0.1.10, #23) ────────────
+# A persona scoped to a few projects leaked a third time, into a HomeLab note in
+# the vault, in a session that had the rule loaded. Every guard built after #9
+# lives at the commit boundary, and the vault has no commits. The brief knew
+# the scope and printed it every session; nothing ever checked the output.
+# $STATE/scope.txt (private, never in a repo; see scope.example):
+#   <term> TAB <path part>|<path part>|...   the term is fine only in a file whose
+#                                             path contains one of the parts
+#   mindforge scrub --vault        every note in the vault
+#   mindforge scrub <file>...      these files
+# Exit 0 clean, 1 hits, 2 could not look. wrap runs it on the vault notes
+# changed this session.
+SCOPE="${MINDFORGE_SCOPE:-$STATE/scope.txt}"
+scope_hits() {   # scope_hits <base dir for names> <file>... -> "rel\tline\tterm\tallowed"
+  local base="$1"; shift
+  [ $# -gt 0 ] || return 0
+  local term allowed line f n rest rel ok part
+  while IFS=$'\t' read -r term allowed; do
+    case "$term" in \#*|"") continue;; esac
+    term=${term%$'\r'}; allowed=${allowed%$'\r'}
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      f=${line%%:*}; rest=${line#*:}; n=${rest%%:*}
+      rel=${f#"$base"/}; ok=0
+      IFS='|' read -ra parts <<<"$allowed"
+      for part in "${parts[@]}"; do
+        [ -n "$part" ] && [[ "${rel,,}" == *"${part,,}"* ]] && { ok=1; break; }
+      done
+      [ "$ok" -eq 1 ] || printf '%s\t%s\t%s\t%s\n' "$rel" "$n" "$term" "$allowed"
+    done < <(grep -HniwF -- "$term" "$@" 2>/dev/null)
+  done < "$SCOPE"
+}
+
+scrub_cmd() {
+  [ -r "$SCOPE" ] || { echo "mindforge scrub: no scope list at $SCOPE -- nothing was checked (see scope.example)" >&2; return 2; }
+  local base files=()
+  case "${1:-}" in
+    --vault)
+      [ -n "$VAULT" ] && [ -d "$VAULT" ] || { echo "mindforge scrub: no vault folder (MINDFORGE_VAULT) -- nothing was checked" >&2; return 2; }
+      base="$VAULT"; mapfile -d '' -t files < <(find "$VAULT" -type f -name '*.md' -print0 2>/dev/null) ;;
+    "") echo "usage: mindforge scrub --vault | <file>..." >&2; return 2 ;;
+    -*) bad_option scrub "$1" ;;
+    *)  base="$PWD"; files=("$@") ;;
+  esac
+  local hits; hits=$(scope_hits "$base" "${files[@]}")
+  if [ -z "$hits" ]; then
+    printf '%sscrub: %d file(s), no scoped name out of its scope%s\n' "$G" "${#files[@]}" "$O"; return 0
+  fi
+  # one line per file and term: how many, and the first line numbers
+  printf '%s\n' "$hits" | awk -F'\t' '
+    { k = $1 "\t" $3; if (!(k in n)) { order[++m] = k; scope[$3] = $4 }
+      n[k]++; if (n[k] <= 5) ln[k] = ln[k] (n[k] > 1 ? ", " : "") $2 }
+    END { for (i = 1; i <= m; i++) { split(order[i], a, "\t")
+            printf "%s\t%s\t%d\t%s%s\n", a[1], a[2], n[order[i]], ln[order[i]], (n[order[i]] > 5 ? ", ..." : "") } }' \
+  | while IFS=$'\t' read -r rel term cnt lines; do
+      printf '  %s%s%s  %s x%s (line %s)\n' "$R" "$rel" "$O" "$term" "$cnt" "$lines"
+    done
+  printf '%s\n' "$hits" | cut -f3,4 | sort -u | while IFS=$'\t' read -r term allowed; do
+    printf '  %s%s is scoped to: %s%s\n' "$D" "$term" "${allowed//|/, }" "$O"
+  done
+  printf '%sscrub: %d mention(s) in %d file(s) outside their scope%s\n' "$Y" "$(grep -c . <<<"$hits")" "$(cut -f1 <<<"$hits" | sort -u | grep -c .)" "$O"
+  return 1
+}
+
+# ── one project's brief (0.1.10, #44) ──────────────────────────────────────
+# The maintainer (2026-10-06): "mindforge [project] go directly to the project
+# summary, table of pending/next tasks, with comments, etc. and
+# recommendations. Same as brief, but reduced to the project." The full brief
+# is for the start of the day; during it he hops projects and wants the same
+# view for the one he is about to open.
+#   mindforge brief <project>   or   mindforge <project>
+# <project>: a queue name (forge-suite/hypeforge), a repo or folder name
+# (hypeforge), any case. An unknown name lists the known ones.
+
+# Every name a project answers to, one per line: "<queue name or ''>\t<dir>".
+known_projects() {
+  local proj d
+  { if [ -r "$STATE/queue.md" ]; then
+      while IFS=$'\t' read -r proj _; do
+        case "$proj" in \#*|@*|"") continue;; esac
+        d=$(proj_dir "$proj") && printf '%s\t%s\n' "$proj" "$d"
+      done < <(queue_lines)
+    fi
+    while IFS= read -r d; do [ -n "$d" ] && printf '\t%s\n' "$d"; done < <(all_repos)
+  } | awk -F'\t' '!seen[$2]++'
+}
+
+# resolve_project <word> -> "<queue name>\t<dir>", status 1 when unknown
+resolve_project() {
+  local want="${1,,}" q d hit=""
+  while IFS=$'\t' read -r q d; do
+    [ -n "$d" ] || continue
+    if [ -n "$q" ] && [ "${q,,}" = "$want" ]; then printf '%s\t%s' "$q" "$d"; return 0; fi
+    [ -z "$hit" ] && { [ "$(basename "${d,,}")" = "$want" ] || { [ -n "$q" ] && [ "$(basename "${q,,}")" = "$want" ]; }; } && hit="$q"$'\t'"$d"
+  done < <(known_projects)
+  [ -n "$hit" ] && { printf '%s' "$hit"; return 0; }
+  return 1
+}
+
+# HAZARD lines (#25) in a project's own Markdown: a hazard written down where a
+# session about to act will see it.
+project_hazards() {
+  local d="$1"; shift
+  local out
+  out=$(grep -rnE --include='*.md' '^[[:space:]>*-]*(\*\*)?HAZARD(\*\*)?:' "$d" 2>/dev/null \
+        | grep -v '/\.git/' | sed "s|^$d/||")
+  local w
+  for w in "$@"; do out=$(grep -iF -- "$w" <<<"$out"); done
+  [ -n "$out" ] && printf '%s\n' "$out"
+}
+
+# #25 · `mindforge hazards <project> [word...]`: what the project wrote down as a
+# hazard, filtered by the words of what is about to be done (ufw-docker, caddy).
+hazards_cmd() {
+  [ -n "${1:-}" ] || { echo "usage: mindforge hazards <project> [word...]" >&2; return 2; }
+  case "$1" in -*) bad_option hazards "$1" ;; esac
+  prime_repos
+  local r d; r=$(resolve_project "$1") || { project_brief "$1"; return 2; }
+  d=${r#*$'\t'}; shift
+  local hz; hz=$(project_hazards "$d" "$@")
+  if [ -z "$hz" ]; then
+    printf 'hazards: none written in %s%s (a line starting HAZARD: in any .md)\n' "$(basename "$d")" "${1:+ for: $*}"
+    return 0
+  fi
+  printf '%s\n' "$hz"
+}
+
+project_brief() {
+  local r q d name g
+  if ! r=$(resolve_project "$1"); then
+    printf 'mindforge: "%s" is not a command or a project I know.\nKnown projects:\n' "$1" >&2
+    known_projects | while IFS=$'\t' read -r q d; do printf '  %s\n' "${q:-$(basename "$d")}"; done | sort -u >&2
+    return 2
+  fi
+  q=${r%%$'\t'*}; d=${r#*$'\t'}; name=${q:-$(basename "$d")}
+  g=$(governing_repo "$d")
+  printf '%s%s%s · %s · %s\n' "$B" "$name" "$O" "$(date '+%a %Y-%m-%d %H:%M')" "$d"
+  # git, the same facts the Projects table shows
+  local c a last st=""
+  if [ -n "$g" ]; then
+    last=$(git -C "$g" log -1 --format=%cs 2>/dev/null)
+    if c=$(repo_dirty_count "$g"); then
+      [ "$c" -gt 0 ] && st="${Y}dirty${O} $(wip_stat "$g")" || st="${G}clean${O}"
+    else st="${R}status unknown${O}"; fi
+    if ! repo_has_remote "$g"; then st="$st · ${Y}no remote${O}"
+    elif a=$(repo_ahead "$g"); then [ "$a" -gt 0 ] && st="$st · ${Y}$a unpushed${O}"
+    else st="$st · ${R}no upstream${O}"; fi
+    printf 'git: %s · last commit %s%s\n' "$st" "${last:--}" "$([ "$g" != "$d" ] && printf ' (in %s)' "$(basename "$g")")"
+  else
+    printf '%sgit: not a repo%s\n' "$R" "$O"
+  fi
+  # the last session whose focus names it
+  local L
+  L=$(grep -v '^#' "$STATE/sessions.log" 2>/dev/null | awk -F'\t' -v n="${name,,}" -v b="$(basename "${name,,}")" \
+      'tolower($4) ~ ("(^|[^a-z0-9])" b "([^a-z0-9]|$)") { l = $0 } END { print l }')
+  if [ -n "$L" ]; then
+    printf 'last session on it: %s (%s–%s) — %s\n' "$(cut -f1 <<<"$L")" "$(cut -f2 <<<"$L")" "$(cut -f3 <<<"$L")" "$(cut -f4 <<<"$L")"
+  else
+    printf '%slast session on it: none in the log names it%s\n' "$D" "$O"
+  fi
+  # the queue line
+  local next="" impact="" block="" ref=""
+  if [ -n "$q" ]; then
+    IFS=$'\t' read -r _ next impact block ref < <(queue_lines | awk -F'\t' -v q="$q" '$1 == q' | head -1)
+    printf 'queue: %s%s%s\n' "$next" "${block:+ · $block}" "${ref:+ · $ref}"
+  else
+    printf '%squeue: no line -- the full brief cannot show it (R11)%s\n' "$Y" "$O"
+  fi
+  echo
+  # the phase table and NEXT items: the project's own status script, else its TODO.md
+  if [ -x "$d/scripts/status.sh" ]; then
+    ( cd "$d" && bash scripts/status.sh ) 2>&1
+  elif [ -r "$d/TODO.md" ]; then
+    printf '%sTODO.md, open items%s\n' "$B" "$O"
+    grep -nE '^[[:space:]]*- \[ \]' "$d/TODO.md" | head -12 | sed -E 's/^([0-9]+):[[:space:]]*- \[ \] /  \1  /' | cut -c1-160
+  else
+    printf '%sno scripts/status.sh and no TODO.md%s\n' "$D" "$O"
+  fi
+  echo
+  # hazards (#25) and the rot findings that name it
+  local hz; hz=$(project_hazards "$d")
+  if [ -n "$hz" ]; then
+    printf '%sHazards%s (written down in the project; read before acting in that area)\n' "$B" "$O"
+    printf '%s\n' "$hz" | sed 's/^/  /' | cut -c1-200; echo
+  fi
+  printf '%sRot check%s (this project)\n' "$B" "$O"
+  prefetch_refs
+  local base found
+  base=$(basename "$name")
+  found=$(R8_CACHE_ONLY=1 rot_checks | awk -F'\t' -v b="$base" -v n="$name" \
+           'index($2, " " n " ") || index($2, " " n ",") || index($2, " " b " ") || index($2, " " b ",") || index($2, " " b "/") || index($2, "for " n) || index($2, "for " b)')
+  if [ -n "$found" ]; then printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do printf '  %s%s%s  %s\n' "$Y" "$code" "$O" "$msg"; done
+  else printf '  %snothing rotting here%s\n' "$G" "$O"; fi
+  echo
+  # one recommendation, in order of what blocks what
+  printf '%sRecommended first%s\n  ' "$B" "$O"
+  if [ -n "$found" ]; then printf 'fix the rot above first: %s\n' "$(head -1 <<<"$found" | cut -f2)"
+  elif [ -n "$g" ] && [ "${c:-0}" -gt 0 ] 2>/dev/null; then printf 'commit what is in the tree (%s) -- or say why it waits\n' "$(wip_stat "$g")"
+  elif [ -n "$g" ] && [ "${a:-0}" -gt 0 ] 2>/dev/null; then printf 'push the %s unpushed commit(s)\n' "$a"
+  elif [[ "$block" == waits:* ]]; then printf 'it waits on %s -- check that first, or pick another project\n' "${block#waits:}"
+  elif [ -n "$next" ]; then printf '%s\n' "$next"
+  else printf 'no queue line and nothing open in git -- add its line to queue.md\n'; fi
+  return 0
+}
+
 # ── hooks · install them by hand, check them by machine (0.1.9, #19) ────────
 # Claude Code's auto mode rightly refuses to let the assistant add hooks to
 # settings.json: hooks run commands at every session start and end, so a person
@@ -1707,6 +2042,7 @@ usage() {
   cat <<'USAGE'
 usage:
   mindforge brief [--headline]     what is true right now
+  mindforge brief <project>        the same, for one project (also: mindforge <project>)
   mindforge wip "<what is half-done>"    record work still in the air
   mindforge wip --show | --clear
   mindforge wrap "<focus>" "<b1>|<b2>"   close the session deliberately
@@ -1720,6 +2056,8 @@ usage:
   mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook; <path> switches and shows it);
                                          wrap moves it to the project the focus names
   mindforge chime [--test]               a sound when the assistant is done and waiting
+  mindforge scrub --vault | <file>...    scoped names outside their scope (scope.txt)
+  mindforge hazards <project> [word...]  the HAZARD: lines a project wrote down
   mindforge hooks [--check | --print [--windows|--linux]]
                                          are the hooks installed? / the block to paste (a person installs hooks)
   mindforge session-start|session-end    (called by hooks)
@@ -1735,7 +2073,13 @@ case "${2:-}" in -h|--help) usage; exit 0 ;; esac
 case "${1:-brief}" in
   -V|--version|version) printf 'mindforge %s\n' "$VERSION" ;;
   -h|--help|help) usage ;;
-  brief) prime_repos; [ "${2:-}" = "--headline" ] && headline || full ;;
+  brief) prime_repos
+         case "${2:-}" in
+           "") full ;;
+           --headline) headline ;;
+           -*) bad_option brief "$2" ;;
+           *) project_brief "$2" ;;
+         esac ;;
   wip)           shift; wip "$@" ;;
   rot)           case "${2:-}" in
                    "") ;;
@@ -1752,10 +2096,14 @@ case "${1:-brief}" in
   chime)         shift; chime "$@" ;;
   active)        shift; active "$@" ;;
   hooks)         shift; hooks_cmd "$@" ;;
+  scrub)         shift; scrub_cmd "$@" ;;
+  hazards)       shift; hazards_cmd "$@" ;;
   session-start) prime_repos; session_start ;;
   session-end)   session_end ;;
   wrap)          shift; prime_repos; wrap "$@" ;;
   drift)         shift; drift "$@" ;;
   log)           shift; log_cmd "$@" ;;
-  *) usage >&2; exit 2 ;;
+  -*) usage >&2; exit 2 ;;
+  # #44 · a word that is not a command may be a project
+  *) prime_repos; project_brief "$1" || { echo >&2; usage >&2; exit 2; } ;;
 esac

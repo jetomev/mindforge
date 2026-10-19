@@ -111,6 +111,12 @@ check() {
     [ -n "${out:-}" ] && head -4 <<<"$out" | sed 's/^/         | /'
   fi
 }
+# cond '<a> && <b>' -- a check with more than one condition. Written as
+#   check "x" [ A ] && [ B ]
+# only A was the check: the && ran OUTSIDE it and its answer was thrown away,
+# so twenty checks (eleven from 0.1.7/0.1.8) claimed two conditions and proved
+# one (found 2026-10-19). The whole condition goes in, evaluated here.
+cond() { eval "$1"; }
 # skip <name> <why> -- the check could not be made here. Never a pass, never
 # a failure: said out loud and counted on its own (#24's third answer).
 skip() {
@@ -496,7 +502,7 @@ if begin "session-start runs the rot check"; then
   gh_repo alpha
   printf 'alpha\tthe task\t3\t-\t#7\n' > "$SB/state/queue.md"
   out=$(SB_GH_STATE=CLOSED mf session-start)
-  check "prints the rot check section"     grep -q '^rot check (R1-R11):' <<<"$out"
+  check "prints the rot check section"     grep -q '^rot check (R1-R12):' <<<"$out"
   check "inside the briefing tags"         bash -c 'sed -n "/^<session-briefing>/,/^<\/session-briefing>/p" <<<"$1" | grep -q "^rot check"' _ "$out"
   check "carries an R8 finding"            grep -q 'R8.*#7 is CLOSED' <<<"$out"
   check "the directive asks for findings"  grep -q 'Name every rot-check finding' <<<"$out"
@@ -824,12 +830,12 @@ if begin "tone as the Stop hook"; then
   check "second pass still alerts"               grep -q 'second pass' <<<"$out"
   fake_transcript "$SB/c.jsonl" "Nice, that worked. Run the next one and paste me the last line."
   out=$(hook_json "$SB/c.jsonl" | mf tone); rc=$?
-  check "a clean reply: silence, exit 0"         [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "a clean reply: silence, exit 0"         cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   check "an earlier reply's header is not counted" true
   out=$(hook_json "$SB/nowhere.jsonl" | mf tone); rc=$?
-  check "no transcript: silence, exit 0"         [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "no transcript: silence, exit 0"         cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   out=$(printf 'not json' | mf tone); rc=$?
-  check "bad input: silence, exit 0"             [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "bad input: silence, exit 0"             cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   mkdir -p "$SB/home/.config/mindforge"; printf '# comment\nhell yeah\n' > "$SB/home/.config/mindforge/tone.local"
   fake_transcript "$SB/l.jsonl" "hell yeah it worked"
   out=$(hook_json "$SB/l.jsonl" | mf tone)
@@ -857,9 +863,9 @@ if begin "tone finds a python that runs"; then
   check "the hook still blocks"                  grep -q '"decision": *"block"' <<<"$out"
   cp "$SB/bin/python3" "$SB/bin/python"; cp "$SB/bin/python3" "$SB/bin/py"
   out=$(mf tone --check "$SB/memo.md"); rc=$?
-  check "no python that runs: --check is silent, exit 0" [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "no python that runs: --check is silent, exit 0" cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
-  check "no python that runs: the hook never blocks"    [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "no python that runs: the hook never blocks"    cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   end
 fi
 
@@ -872,11 +878,11 @@ if begin "active project"; then
   make_repo listed; make_repo other; make_repo plain; status_script listed; status_script other
   printf 'listed\tthe task\t3\tno\t-\n' > "$SB/state/queue.md"
   out=$(mf active); rc=$?
-  check "no pointer: silence, exit 0"            [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "no pointer: silence, exit 0"            cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   out=$(mf active "$SB/projects/plain" 2>/dev/null); rc=$?
   check "a project with no status script is refused (exit 2)" [ "$rc" -eq 2 ]
   out=$(mf active "$SB/projects/listed"); rc=$?
-  check "pointing at a project is confirmed"     [ "$rc" -eq 0 ] && grep -q 'active project: .*/listed' <<<"$out"
+  check "pointing at a project is confirmed"     cond '[ "$rc" -eq 0 ] && grep -q '\''active project: .*/listed'\'' <<<"$out"'
   out=$(mf active)
   check "the banner carries the directive"       grep -q '^ACTIVE PROJECT' <<<"$out"
   check "the banner runs the status script"      grep -q 'status of listed' <<<"$out"
@@ -896,13 +902,13 @@ if begin "active project"; then
   check "and the stale status still prints, after the warning" grep -q 'status of listed' <<<"$out"
   # The maintainer, 2026-10-17: "summarized project table, always, when I am calling a project. Many times now."
   out=$(mf active "$SB/projects/listed")
-  check "switching to a project prints its summary too"   grep -q 'status of listed' <<<"$out" && grep -q '^ACTIVE PROJECT' <<<"$out"
+  check "switching to a project prints its summary too"   cond 'grep -q '\''status of listed'\'' <<<"$out" && grep -q '\''^ACTIVE PROJECT'\'' <<<"$out"'
   check "a project just chosen is no disagreement"        bash -c '! grep -q DISAGREES <<<"$1"' _ "$out"
   printf '%s\n' "$SB/projects/other" > "$SB/home/.claude/active-project"; rm "$SB/state/active-project"
   check "the 2026-09-23 pointer file is adopted"  [ "$(mf active --show)" = "$SB/projects/other" ]
   mf active "$SB/projects/other" >/dev/null
   check "active <path> stores the same spelling wrap does" [ "$(mf active --show)" = "$other_git" ]
-  check "and moved into the state folder"        [ ! -e "$SB/home/.claude/active-project" ] && [ -s "$SB/state/active-project" ]
+  check "and moved into the state folder"        cond '[ ! -e "$SB/home/.claude/active-project" ] && [ -s "$SB/state/active-project" ]'
   mf active --clear >/dev/null
   check "--clear: silence again"                 [ -z "$(mf active)" ]
   end
@@ -914,9 +920,9 @@ if begin "chime"; then
   out=$(MINDFORGE_CHIME="$SB/ding.oga" mf chime --test)
   check "names the player and the file"          grep -q "chime: paplay $SB/ding.oga" <<<"$out"
   out=$(MINDFORGE_CHIME="$SB/nowhere.oga" mf chime --test); rc=$?
-  check "a missing file: says so, exit 0"        grep -q 'no sound file' <<<"$out" && [ "$rc" -eq 0 ]
+  check "a missing file: says so, exit 0"        cond 'grep -q '\''no sound file'\'' <<<"$out" && [ "$rc" -eq 0 ]'
   out=$(MINDFORGE_CHIME="$SB/ding.oga" MINDFORGE_CHIME_PLAYER=no-such-player mf chime); rc=$?
-  check "plain chime never fails"                [ "$rc" -eq 0 ] && [ -z "$out" ]
+  check "plain chime never fails"                cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
   end
 fi
 
@@ -988,12 +994,12 @@ fi
 # #19 · Hooks are installed by a person; mindForge prints the block and checks it.
 if begin "hooks --print / --check (#19)"; then
   out=$(mf hooks --check); rc=$?
-  check "nothing installed: says so, exit 1"   [ "$rc" -eq 1 ] && grep -q 'NOT INSTALLED: session-start, session-end' <<<"$out"
+  check "nothing installed: says so, exit 1"   cond '[ "$rc" -eq 1 ] && grep -q '\''NOT INSTALLED: session-start, session-end'\'' <<<"$out"'
   mf hooks --print --linux 2>/dev/null > "$SB/home/.claude/settings.json"
   check "the Linux block is valid JSON"         "$PY" -c 'import json,sys; json.load(open(sys.argv[1]))' "$SB/home/.claude/settings.json"
   check "the Linux block has no shell key"      bash -c '! grep -q "\"shell\"" "$1"' _ "$SB/home/.claude/settings.json"
   out=$(mf hooks --check); rc=$?
-  check "the printed block passes --check"      [ "$rc" -eq 0 ] && grep -q 'are installed' <<<"$out"
+  check "the printed block passes --check"      cond '[ "$rc" -eq 0 ] && grep -q '\''are installed'\'' <<<"$out"'
   check "and the brief's own check agrees"      bash -c '! grep -q "^hooks:" <<<"$1"' _ "$(mf brief --headline)"
   out=$(mf hooks --print --windows 2>/dev/null)
   check "the Windows block is valid JSON"       "$PY" -c 'import json,sys; json.loads(sys.stdin.read())' <<<"$out"
@@ -1040,7 +1046,134 @@ if begin "tone: a Git Bash transcript path (#65)"; then
   check "the path is translated and the memo caught" grep -q '"decision": *"block"' <<<"$out"
   rm "$SB/bin/cygpath"
   out=$(hook_json "/msys/t.jsonl" | mf tone); rc=$?
-  check "setup: without cygpath the same path is silent" [ -z "$out" ] && [ "$rc" -eq 0 ]
+  check "setup: without cygpath the same path is silent" cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
+  end
+fi
+
+# ------------------------------------------------------------------ 0.1.10
+# #47 · R8 holds a version a queue row says shipped against the newest tag --
+# "-" rows included -- and wrap asks about the row of a project with commits.
+if begin "R8: a row behind its newest tag (#47)"; then
+  make_repo alpha; g alpha tag -a -m v v0.9.0
+  printf 'alpha\tnext: labels; 0.8.0 shipped 10-06\t3\tno\t-\n' > "$SB/state/queue.md"
+  out=$(mf rot)
+  check "a '-' row saying 0.8.0 shipped, tag v0.9.0: flagged" grep -q 'R8.*alpha says 0.8.0 shipped, but its newest tag is 0.9.0' <<<"$out"
+  printf 'alpha\tnext: labels; 0.9.0 shipped 10-07\t3\tno\t-\n' > "$SB/state/queue.md"
+  check "a row naming the newest tag: quiet"     bash -c '! grep -q "R8.*alpha says" <<<"$1"' _ "$(mf rot)"
+  printf 'alpha\tnext: the 1.0.0 plan\t3\tno\t-\n' > "$SB/state/queue.md"
+  check "a version not said to be shipped: quiet" bash -c '! grep -q "R8.*alpha says" <<<"$1"' _ "$(mf rot)"
+  # a monorepo section tags <section>-vX.Y.Z
+  make_repo suite; mkdir -p "$SB/projects/suite/kit"; echo x > "$SB/projects/suite/kit/f"
+  g suite add -A; g suite commit -qm kit; g suite tag -a -m v kit-v0.9.0; g suite tag -a -m v other-v3.0.0
+  printf 'suite/kit\tnext: x; 0.8.0 shipped\t3\tno\t-\n' > "$SB/state/queue.md"
+  check "a monorepo section: held against <section>-v tags" grep -q 'R8.*suite/kit says 0.8.0 shipped, but its newest tag is 0.9.0' <<<"$(mf rot)"
+  end
+fi
+if begin "wrap asks about the queue row (#47)"; then
+  make_repo alpha; make_repo beta
+  printf 'alpha\tthe old plan\t3\tno\t-\nbeta\tbeta things\t3\tno\t-\n' > "$SB/state/queue.md"
+  touch -d '-2 hours' "$SB/state/queue.md"
+  # the mark a minute ahead, so make_repo's commits fall before the session
+  mkdir -p "$SB/state/marks"; printf '%s\t%s\n' "$(date -d '+1 min' +%F)" "$(date -d '+1 min' +%H:%M)" > "$SB/state/marks/$SID"
+  GIT_COMMITTER_DATE="$(date -d '+2 min' -R)" g alpha commit -q --allow-empty -m "this session"; g alpha push -q origin main 2>/dev/null
+  out=$(mf wrap "alpha work" "b1")
+  check "a project with commits, queue untouched: still true?" grep -q 'queue: alpha got [0-9]* commit(s) this session and its row still says "the old plan" -- still true' <<<"$out"
+  check "and the wrap is NOT clean"            grep -q 'wrap NOT clean' <<<"$out"
+  check "a project without commits is not asked about" bash -c '! grep -q "queue: beta" <<<"$1"' _ "$out"
+  now_mark; touch "$SB/state/queue.md"
+  out=$(mf wrap "alpha work" "b1")
+  check "queue.md edited this session: shown, not open" cond 'grep -q '\''queue: alpha -- the old plan'\'' <<<"$out" && bash -c '\''! grep -q "still true" <<<"$1"'\'' _ "$out"'
+  end
+fi
+
+# #28 · A file that declares `rewritten_by: session` is held to it, at both ends.
+if begin "R12: the every-session file (#28)"; then
+  make_repo alpha; : > "$SB/mem/MEMORY.md"
+  out=$(mf brief | sed -n '/^State/,/^$/p')
+  check "no file declares it: said out loud"   grep -q 'no memory file declares rewritten_by: session -- R12 has nothing to check' <<<"$out"
+  printf -- '---\nname: plan\nmetadata:\n  type: project\n  rewritten_by: session\n---\nthe plan\n' > "$SB/mem/plan.md"
+  printf -- '- [plan](plan.md)\n' > "$SB/mem/MEMORY.md"
+  y=$(date -d yesterday +%F)
+  printf '%s\t10:00\t12:00\twork\tb\twrapped\n' "$y" >> "$SB/state/sessions.log"
+  touch -d "$y 09:00" "$SB/mem/plan.md"; touch -d "$y 09:00" "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "written before the last session began: R12" grep -q 'R12.*plan.md is rewritten every session, but was last written .* before the last session began' <<<"$out"
+  touch -d "$y 11:00" "$SB/mem/plan.md" "$SB/mem/MEMORY.md"
+  check "rewritten during it: quiet"           bash -c '! grep -q R12 <<<"$1"' _ "$(mf rot)"
+  printf '%s\t13:00\t13:05\t(not wrapped)\t\tauto\n' "$y" >> "$SB/state/sessions.log"
+  check "a 5-minute churn session after it does not count" bash -c '! grep -q R12 <<<"$1"' _ "$(mf rot)"
+  check "the State line names the file"        grep -q 'handoff    plan.md, written' <<<"$(mf brief)"
+  now_mark; touch -d '-2 hours' "$SB/mem/plan.md"
+  out=$(mf wrap "focus" "b")
+  check "a wrap that left it untouched: open"  grep -q 'plan.md is rewritten every session, and this one has not rewritten it' <<<"$out"
+  now_mark; touch "$SB/mem/plan.md"
+  check "a wrap after rewriting it: ok"        grep -q 'plan.md rewritten this session' <<<"$(mf wrap focus b)"
+  end
+fi
+
+# #44 · One project's brief.
+if begin "mindforge <project> (#44)"; then
+  make_repo alpha; make_repo suite; mkdir -p "$SB/projects/suite/kit/scripts"
+  printf '#!/usr/bin/env bash\necho "kit status table"\n' > "$SB/projects/suite/kit/scripts/status.sh"; chmod +x "$SB/projects/suite/kit/scripts/status.sh"
+  g suite add -A; g suite commit -qm kit; g suite push -q origin main 2>/dev/null; g suite tag -a -m v kit-v0.9.0
+  printf 'suite/kit\tlabels; 0.8.0 shipped\t3\twaits:review\t-\nalpha\tthe alpha task\t3\tno\t-\n' > "$SB/state/queue.md"
+  printf -- '- [ ] alpha open item one\n- [x] done item\n' > "$SB/projects/alpha/TODO.md"; g alpha add -A; g alpha commit -qm todo; g alpha push -q origin main 2>/dev/null
+  printf '%s\t10:00\t11:00\tkit: the labels\tb\twrapped\n' "$(date +%F)" >> "$SB/state/sessions.log"
+  out=$(mf KIT); rc=$?
+  check "found by its folder name, any case"   cond '[ "$rc" -eq 0 ] && grep -q '\''^suite/kit · '\'' <<<"$out"'
+  check "the queue line"                       grep -q '^queue: labels; 0.8.0 shipped · waits:review' <<<"$out"
+  check "the last session that names it"       grep -q '^last session on it: .* — kit: the labels' <<<"$out"
+  check "its own status script"                grep -q 'kit status table' <<<"$out"
+  check "the rot finding that names it"        grep -q 'R8.*suite/kit says 0.8.0 shipped' <<<"$out"
+  check "another project's rot is not shown"   bash -c '! grep -q "alpha" <<<"$1"' _ "$(sed -n '/^Rot check/,/^$/p' <<<"$out")"
+  check "recommended: the rot first"           grep -A1 '^Recommended first' <<<"$out" | grep -q 'fix the rot above first'
+  out=$(mf brief alpha)
+  check "brief <name> works too"               grep -q '^alpha · ' <<<"$out"
+  check "no status script: its TODO.md open items" cond 'grep -q '\''alpha open item one'\'' <<<"$out" && bash -c '\''! grep -q "done item" <<<"$1"'\'' _ "$out"'
+  check "recommended: the queue's next"        grep -A1 '^Recommended first' <<<"$out" | grep -q 'the alpha task'
+  echo dirt > "$SB/projects/alpha/new"
+  check "a dirty tree is recommended first"    grep -A1 '^Recommended first' <<<"$(mf alpha)" | grep -q 'commit what is in the tree'
+  out=$(mf nosuch 2>&1); rc=$?
+  check "an unknown name: exit 2, the known ones listed" cond '[ "$rc" -eq 2 ] && grep -q '\''not a command or a project I know'\'' <<<"$out" && grep -q '\''^  suite/kit'\'' <<<"$out"'
+  check "brief --bogus is refused"             bash -c '! "$@" >/dev/null 2>&1' _ mf brief --bogus
+  end
+fi
+
+# #23 · The scope list runs over the vault notes a session changed.
+if begin "the vault scrub (#23)"; then
+  make_repo alpha; mkdir -p "$SB/vault/My-Novel" "$SB/vault/HomeLab"
+  printf 'Aldric\tMy-Novel|The-Game\n' > "$SB/state/scope.txt"
+  now_mark
+  printf 'Aldric walked in.\n' > "$SB/vault/My-Novel/ch1.md"
+  printf 'Today aldric fixed the router.\n' > "$SB/vault/HomeLab/log.md"
+  out=$(SB_VAULT="$SB/vault" mf wrap "focus" "b")
+  check "a scoped name out of scope: the wrap names the note" grep -q 'vault: HomeLab/log.md names Aldric outside its scope' <<<"$out"
+  check "the note where it belongs is not named" bash -c '! grep -q "My-Novel/ch1.md names" <<<"$1"' _ "$out"
+  out=$(SB_VAULT="$SB/vault" mf scrub --vault); rc=$?
+  check "scrub --vault: exit 1, the note and the count" cond '[ "$rc" -eq 1 ] && grep -q '\''HomeLab/log.md  Aldric x1 (line 1)'\'' <<<"$out"'
+  printf 'nothing to see\n' > "$SB/vault/HomeLab/log.md"
+  now_mark
+  check "clean again: the wrap says so"        grep -q 'vault: no scoped name out of its scope' <<<"$(SB_VAULT="$SB/vault" mf wrap f b)"
+  out=$(SB_VAULT="$SB/vault" mf scrub --vault); rc=$?
+  check "scrub --vault clean: exit 0"          [ "$rc" -eq 0 ]
+  rm "$SB/state/scope.txt"
+  out=$(SB_VAULT="$SB/vault" mf scrub --vault 2>&1); rc=$?
+  check "no scope list: could not look, exit 2" cond '[ "$rc" -eq 2 ] && grep -q '\''nothing was checked'\'' <<<"$out"'
+  printf 'the X/Y persona is scoped to A ONLY\n' > "$SB/state/persona.txt"; now_mark
+  check "a persona but no scope list: the wrap says NOT verified" grep -q 'no scope.txt, so the vault notes were not checked for it -- NOT verified' <<<"$(SB_VAULT="$SB/vault" mf wrap f b)"
+  end
+fi
+
+# #25 · HAZARD: lines surface where a session about to act will see them.
+if begin "hazards (#25)"; then
+  make_repo alpha; mkdir -p "$SB/projects/alpha/docs"
+  printf '# Decisions\n\nHAZARD: ufw-docker blocks ports 80/443 until ufw-docker allow AND the cloud firewall rule.\nNot a hazard: ufw is fine.\n' > "$SB/projects/alpha/docs/DECISIONS.md"
+  printf 'alpha\tgo live\t3\tno\t-\n' > "$SB/state/queue.md"
+  out=$(mf hazards alpha ufw)
+  check "a word that matches: the line, with its file" grep -q 'docs/DECISIONS.md:3:HAZARD: ufw-docker blocks' <<<"$out"
+  check "only HAZARD: lines"                   bash -c '! grep -q "Not a hazard" <<<"$1"' _ "$out"
+  check "a word that does not match: none, said" grep -q 'hazards: none written in alpha for: nginx' <<<"$(mf hazards alpha nginx)"
+  check "the project brief shows them"         grep -A1 '^Hazards' <<<"$(mf alpha)" | grep -q 'ufw-docker'
   end
 fi
 

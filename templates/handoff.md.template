@@ -1,0 +1,19 @@
+# Handoff — {{FROM}} → {{TO}} · {{DATE}}
+
+<!-- A cross-machine handoff carries SCOPE and FACTS. Never WORKING METHOD:
+     the receiving machine's own rules are loaded there, win there, and cannot be
+     checked from here. There is deliberately no section for method.
+     Write it from a blank page each time; do not append to an old one. -->
+
+## Scope
+- **This session owns:** {{WHAT_IT_OWNS}}
+- **Do not touch:** {{OFF_LIMITS}}
+- **Blocked on:** {{BLOCKERS}}
+
+## Facts (each with its evidence)
+- **Shipped / live:** {{WHAT_IS_TRUE}} — {{EVIDENCE: a commit, a URL, a command and its output}}
+- **Failed:** {{WHAT_FAILED}}
+- **Not verified:** {{WHAT_NOBODY_HAS_CHECKED}}
+
+## The one next step
+{{NEXT}}
