@@ -7,13 +7,31 @@ set -uo pipefail
 
 # Paths come from config, never from this file -- it is published.
 # ~/.config/mindforge/config is local and gitignored; see config.example.
+# #31 · An explicit export beats the config. The config was sourced first and
+# simply assigned, so whatever it set clobbered what a sandbox had exported:
+# a "sandboxed" run on the home PC wrote to the REAL vault, because that is the
+# one thing its config set -- and a machine whose config set more lost more.
+# Whatever the environment already carries is put back after the config runs.
+_mf_env=$(declare -px 2>/dev/null | grep -E '^declare -x (MINDFORGE_[A-Za-z0-9_]+|CLAUDE_CONFIG_DIR)=' || true)
 [ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
+[ -n "$_mf_env" ] && eval "$_mf_env"
+unset _mf_env
 
 VERSION="0.1.8"
 STATE="${MINDFORGE_STATE:-$HOME/.claude/state}"
 PROJECTS="${MINDFORGE_PROJECTS:-$HOME/Programs}"   # colon-separated, PATH-style
-# Claude Code encodes the working directory into the memory path: / becomes -
-MEM="${MINDFORGE_MEMORY:-$HOME/.claude/projects/$(echo "$HOME" | tr '/' '-')/memory}"
+# Claude Code encodes the working directory into the memory path: every
+# character that is not a letter or a digit becomes "-" (~/.claude is
+# -home-x--claude). #15 · On Windows it encodes the WINDOWS path, C:\Users\x ->
+# C--Users-x, while Git Bash's $HOME is /c/Users/x -> -c-Users-x, a folder that
+# does not exist; the brief then counted no memory at all, without a word.
+# cygpath -w gives the spelling Claude Code saw; elsewhere $HOME is that spelling.
+home_spelling() {
+  local h="$HOME" w
+  if command -v cygpath >/dev/null 2>&1 && w=$(cygpath -w "$HOME" 2>/dev/null) && [ -n "$w" ]; then h="$w"; fi
+  printf '%s' "$h" | tr -d '\r' | sed 's/[^A-Za-z0-9]/-/g'
+}
+MEM="${MINDFORGE_MEMORY:-$HOME/.claude/projects/$(home_spelling)/memory}"
 VAULT="${MINDFORGE_VAULT:-}"
 REMOTE="$STATE/remote.json"
 
@@ -40,6 +58,18 @@ B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; O=$'\03
 # That is what makes the blind spot impossible rather than merely wider.
 proj_roots() { printf '%s\n' "$PROJECTS" | tr ':' '\n' | grep -v '^$'; }
 
+# #18 · The repos a root holds: every folder under it that is a repo, and the
+# root ITSELF when it is one. A work repo inside a synced folder (Dropbox,
+# OneDrive, a path with spaces and an apostrophe) can then be listed directly
+# as a root, instead of being reached through a junction nothing records.
+root_repos() {
+  local d
+  [ -e "$1/.git" ] && printf '%s\n' "$1"
+  for d in "$1"/*/.git; do
+    [ -e "$d" ] && printf '%s\n' "${d%/.git}"
+  done
+}
+
 # Resolve a queue name to a directory. The name may carry a path, because a
 # sub-project inside a monorepo is `platform/store-two` -- so the first root
 # that HAS it wins, and no name is assumed to live under the first root.
@@ -47,6 +77,10 @@ proj_dir() {
   local root
   while IFS= read -r root; do
     [ -d "$root/$1" ] && { printf '%s' "$root/$1"; return 0; }
+  done < <(proj_roots)
+  # #18 · a root that is itself a repo answers to its own folder name
+  while IFS= read -r root; do
+    [ "$(basename "$root")" = "$1" ] && [ -e "$root/.git" ] && { printf '%s' "$root"; return 0; }
   done < <(proj_roots)
   return 1
 }
@@ -71,14 +105,21 @@ queue_lines() { tr -d '\r' < "$STATE/queue.md"; }
 # C:/Users/x/repo; a junction (or a symlinked root) adds a third spelling. A
 # string compare saw two repos where there was one: the brief counted every
 # queued repo twice, and R11 named every queued project as missing.
+# Built once per run (#38): the headline, R3 and the wrap checks each walked
+# every root and asked git about every repo again; on Windows every git call
+# is a slow process start. prime_repos fills the list in the main shell.
+ALL_REPOS_LIST="" ALL_REPOS_SET=""
+prime_repos() { ALL_REPOS_LIST=$(all_repos_scan); ALL_REPOS_SET=1; }
 all_repos() {
+  if [ -n "$ALL_REPOS_SET" ]; then [ -n "$ALL_REPOS_LIST" ] && printf '%s\n' "$ALL_REPOS_LIST"; return 0; fi
+  all_repos_scan
+}
+all_repos_scan() {
   local root d proj g
   { while IFS= read -r root; do
-      for d in "$root"/*/.git; do
-        [ -d "$d" ] || continue
-        d=${d%/.git}
+      while IFS= read -r d; do
         if g=$(governing_repo "$d") && [ -n "$g" ]; then printf '%s\n' "$g"; else printf '%s\n' "$d"; fi
-      done
+      done < <(root_repos "$root")
     done < <(proj_roots)
     if [ -r "$STATE/queue.md" ]; then
       while IFS=$'\t' read -r proj _; do
@@ -403,9 +444,14 @@ full() {
   echo
 
   printf '%sState%s\n' "$B" "$O"
-  printf '  memory     %s files, newest %s\n' \
-    "$(ls "$MEM"/*.md 2>/dev/null | wc -l)" \
-    "$(date -r "$(ls -t "$MEM"/*.md 2>/dev/null | head -1)" '+%Y-%m-%d %H:%M' 2>/dev/null)"
+  # #15 · a folder that is not there is not an empty one: say where it looked.
+  if [ -d "$MEM" ]; then
+    printf '  memory     %s files, newest %s\n' \
+      "$(ls "$MEM"/*.md 2>/dev/null | wc -l)" \
+      "$(date -r "$(ls -t "$MEM"/*.md 2>/dev/null | head -1)" '+%Y-%m-%d %H:%M' 2>/dev/null)"
+  else
+    printf '  memory     %snot found at %s -- set MINDFORGE_MEMORY in the config%s\n' "$R" "$MEM" "$O"
+  fi
   printf '  L0         %s/60 lines\n' "$(grep -c '' "$HOME/.claude/CLAUDE.md" 2>/dev/null || echo 0)"
   printf '  L1         %s domains\n' "$(ls "$HOME"/.claude/rules/*.md 2>/dev/null | wc -l)"
   if [ -n "$VAULT" ] && [ -d "$VAULT" ]; then
@@ -529,7 +575,21 @@ prefetch_refs() {
   wait
 }
 
+# #38 · Where does the time go? On the work laptop `rot` took ten seconds and
+# the report could only say "slow". `mindforge rot --timings` prints how long
+# each rule took, to stderr, so the next report names the slow one.
+LAP_LAST="" LAP_NAME=""
+now_ms() { local n; n=$(date +%s%N 2>/dev/null); case "$n" in *N|"") echo $(( $(date +%s) * 1000 ));; *) echo $(( n / 1000000 ));; esac; }
+lap() {
+  [ -n "${MF_TIMINGS:-}" ] || return 0
+  local n; n=$(now_ms)
+  [ -n "$LAP_NAME" ] && printf 'timing\t%-9s %6d ms\n' "$LAP_NAME" $(( n - LAP_LAST )) >&2
+  LAP_LAST=$n; LAP_NAME="$1"; [ "$1" = end ] && LAP_NAME=""
+  return 0
+}
+
 rot_checks() {
+  lap 'R6 roots'
   # #24 · A root that does not exist contributes zero repos, and zero repos
   # looks exactly like zero problems.
   local root
@@ -537,6 +597,7 @@ rot_checks() {
     [ -d "$root" ] || printf 'R6\tproject root %s does not exist -- nothing under it was checked\n' "$root"
   done < <(proj_roots)
 
+  lap 'R10'
   # R10 · the session hooks (#16) -- in the rot check too, so a hook removed
   # later is caught by whatever still runs, and counted by three-strikes.
   local hk; hk=$(hooks_missing); case $? in
@@ -544,8 +605,11 @@ rot_checks() {
     2) printf 'R10\thooks could not be checked -- %s\n' "$hk" ;;
   esac
 
+  lap 'R1'
   # R1 · PKGBUILD version vs the repo's latest tag
-  for root in $(proj_roots); do
+  # #18 · `for root in $(proj_roots)` split a root with a space in it into
+  # pieces that do not exist, and R1/R2 skipped it without a word.
+  while IFS= read -r root; do
   for pb in "$root"/*/PKGBUILD; do
     [ -f "$pb" ] || continue
     local d=${pb%/PKGBUILD} name; name=$(basename "$d")
@@ -556,11 +620,12 @@ rot_checks() {
     [ -n "$tv" ] && [ "$pv" != "$tv" ] && \
       printf 'R1\tPKGBUILD in %s says %s, latest tag is %s\n' "$name" "$pv" "$tv"
   done
-  done
+  done < <(proj_roots)
 
+  lap 'R2'
   # R2 · repo-root PKGBUILD vs its AUR twin -- CONTENT, not version.
   # Both files said 1.3.1 on 2026-08-29 while one fetched an unsigned tarball.
-  for root in $(proj_roots); do
+  while IFS= read -r root; do
   for pb in "$root"/*/PKGBUILD; do
     [ -f "$pb" ] || continue
     local d=${pb%/PKGBUILD} name; name=$(basename "$d")
@@ -579,8 +644,9 @@ rot_checks() {
       break
     done
   done
-  done
+  done < <(proj_roots)
 
+  lap 'R3'
   # R3 · unpushed work, or nowhere to push it. (Uncommitted work is normal
   # mid-session; the headline counts it, the rot check does not nag about it.)
   # #24 · "no upstream" used to read as "0 unpushed" -- silence, where the
@@ -599,6 +665,7 @@ rot_checks() {
     fi
   done < <(all_repos)
 
+  lap 'R4'
   # R4 · memory index out of step with the files it indexes
   # #24 · R4, R7 and R9 all need the folder AND its index. Without them the
   # three used to skip in silence and the brief said "nothing rotting".
@@ -610,17 +677,20 @@ rot_checks() {
     local files idx
     # Name the orphans rather than comparing counts: an index line can carry
     # more than one link, so a count comparison over-reports.
-    local orphans=""
+    # #38 · One read of the index, not one grep per memory file: on Windows
+    # every process start is slow, and 112 files were 112 greps.
+    local orphans="" index; index=$(<"$MEM/MEMORY.md")
     for f in "$MEM"/*.md; do
       [ -e "$f" ] || continue
-      local b; b=$(basename "$f")
+      local b; b=${f##*/}
       case "$b" in MEMORY.md|archive_index_*) continue;; esac
-      grep -qF "($b)" "$MEM/MEMORY.md" 2>/dev/null || orphans="$orphans $b"
+      [[ "$index" == *"($b)"* ]] || orphans="$orphans $b"
     done
     [ -n "$orphans" ] && \
       printf 'R4\tmemory file(s) missing from MEMORY.md:%s\n' "$orphans"
   fi
 
+  lap 'R5'
   # R5 · L0 over budget -- dilution looks exactly like drift
   # #24 · a missing L0 was "0 lines, under budget". It is the opposite: no
   # working agreement is being loaded at all.
@@ -631,6 +701,7 @@ rot_checks() {
     [ "$l0" -gt 60 ] && printf 'R5\tL0 is %s lines, over the 60-line budget\n' "$l0"
   fi
 
+  lap 'R6 queue'
   # R6 · queue points at a project that is not there
   # F-20 · guarded: an absent queue.md is a first-run state, not a crash site.
   if [ -r "$STATE/queue.md" ]; then
@@ -640,6 +711,7 @@ rot_checks() {
     done < <(queue_lines)
   fi
 
+  lap 'R8'
   # R8 · the queue points at work that is already finished.
   # R6 above asks whether the PROJECT exists -- the only part of a queue line
   # that was never going to go wrong. Nothing asked whether the TASK was still
@@ -684,6 +756,7 @@ rot_checks() {
       printf 'R8\tgh is not on PATH -- no queue entry was checked\n'
   fi
 
+  lap 'R11'
   # R11 · active work the queue does not name (#39).
   # R6 asks whether each queue line points at something real; R8 whether its
   # task is still open. Nothing asked whether the queue is COMPLETE. On
@@ -708,9 +781,7 @@ rot_checks() {
       esac
     done < <(queue_lines)
     while IFS= read -r root; do
-      for d in "$root"/*/.git; do
-        [ -d "$d" ] || continue
-        d=${d%/.git}
+      while IFS= read -r d; do
         local n t base; n=$(basename "$d")
         # #43 · compare git's spelling with git's spelling (see all_repos).
         g=$(governing_repo "$d") && [ -n "$g" ] || g="$d"
@@ -734,10 +805,11 @@ rot_checks() {
         [ -n "$t" ] && [ "$t" -ge "$cutoff" ] || continue
         printf 'R11\t%s has commits from %s but no line in the queue -- the brief cannot show its next step (add it, or name it on an @quiet line)\n' \
           "$n" "$(date -d "@$t" +%F 2>/dev/null || echo "the last $days days")"
-      done
+      done < <(root_repos "$root")
     done < <(proj_roots)
   fi
 
+  lap 'R7'
   # R7 · the index is STALE, not merely incomplete.
   # R4 catches a memory file with no index line at all. It does not catch an
   # index line that contradicts the file it points at -- which is the failure
@@ -745,18 +817,17 @@ rot_checks() {
   # the file's contents, and stated the opposite of what the file said.
   # Proxy: any memory file written more recently than MEMORY.md itself.
   if [ -d "$MEM" ] && [ -r "$MEM/MEMORY.md" ]; then
-    local idx_age stale=""
-    idx_age=$(stat -c %Y "$MEM/MEMORY.md")
-    for f in "$MEM"/*.md; do
-      [ -e "$f" ] || continue
-      local b; b=$(basename "$f")
-      case "$b" in MEMORY.md|archive_index_*) continue;; esac
-      [ "$(stat -c %Y "$f")" -gt "$idx_age" ] && stale="$stale $b"
-    done
+    # #38 · one find, not one stat per file (see R4).
+    local stale="" b
+    while IFS= read -r b; do
+      case "$b" in MEMORY.md|archive_index_*|"") continue;; esac
+      stale="$stale $b"
+    done < <(find "$MEM" -maxdepth 1 -name '*.md' -newer "$MEM/MEMORY.md" -printf '%f\n' 2>/dev/null | sort)
     [ -n "$stale" ] && \
       printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
   fi
 
+  lap 'R9'
   # R9 · the index is OVER BUDGET, which is the quietest failure of the lot.
   # R7 catches an index that is stale. R4 catches a memory with no index line.
   # Neither catches an index too LARGE to load: past the harness limit
@@ -775,13 +846,16 @@ rot_checks() {
       printf 'R9\tMEMORY.md is %s bytes, past the %s-byte budget -- part of the index may already be silently dropped; compact it\n' \
         "$sz" "$MEMORY_MAX"
   fi
+  lap end
 }
 
 # Persist findings so "still broken" can be distinguished from "new today".
 # Three sessions in a row promotes a finding to the top of the brief.
 rot() {
   local log="$STATE/rot.log" today; today=$(date +%F)
+  local t0; [ -n "${MF_TIMINGS:-}" ] && t0=$(now_ms)
   prefetch_refs
+  [ -n "${MF_TIMINGS:-}" ] && printf 'timing\t%-9s %6d ms\n' "tracker" $(( $(now_ms) - t0 )) >&2
   local found; found=$(R8_CACHE_ONLY=1 rot_checks)
   if [ -n "$found" ]; then
     printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
@@ -1117,6 +1191,7 @@ wrap() {
   # status script moves the pointer; one that names none leaves it alone.
   local ap
   if ap=$(focus_project "$focus") && [ -n "$ap" ]; then
+    ap=$(canon_dir "$ap")
     mkdir -p "$STATE" && printf '%s\n' "$ap" > "$ACTIVE" && ACTIVE_MOVED="$ap"
   fi
   # The mark stays, stamped with this row's end, until session-end spends it.
@@ -1373,6 +1448,20 @@ try:
 except ValueError:
     sys.exit(0)
 transcript = hook.get("transcript_path") or ""
+# #65 (W-14, item 2) · A path in Git Bash's spelling (/tmp/x, /c/Users/x) means
+# nothing to a Windows python, which read "no transcript" and stayed silent.
+# Claude Code itself sends Windows paths; any other caller may not. Where
+# cygpath exists, ask it for the spelling this python can open.
+if transcript and not os.path.isfile(transcript):
+    import shutil, subprocess
+    if shutil.which("cygpath"):
+        try:
+            alt = subprocess.run(["cygpath", "-m", transcript], capture_output=True,
+                                 text=True, timeout=5).stdout.strip()
+            if alt and os.path.isfile(alt):
+                transcript = alt
+        except (OSError, subprocess.SubprocessError):
+            pass
 if not os.path.isfile(transcript):
     sys.exit(0)
 found = tells_in(last_reply(transcript))
@@ -1461,6 +1550,21 @@ LEGACY_ACTIVE="$CLAUDE_DIR/active-project"     # where the 2026-09-23 hook kept 
 
 physical() { ( cd "$1" 2>/dev/null && pwd -P ); }
 
+# #65 (W-14, item 4) · One spelling for the pointer, whoever writes it. wrap
+# stored git's spelling (C:/Users/x/...) and `mindforge active <path>` stored
+# Git Bash's (/c/Users/x/...), so the same project read as two on the laptop.
+# Inside a repo the spelling is git's: its top plus the path within it (a
+# sub-project of a monorepo keeps its own folder). Outside one, pwd -P.
+canon_dir() {
+  local top pre
+  if top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ]; then
+    pre=$(git -C "$1" rev-parse --show-prefix 2>/dev/null); pre=${pre%/}
+    printf '%s' "$top${pre:+/$pre}"
+  else
+    physical "$1"
+  fi
+}
+
 active_path() {   # the pointer, expanded; status 1 when there is none
   if [ ! -e "$ACTIVE" ] && [ -s "$LEGACY_ACTIVE" ]; then
     mkdir -p "$STATE" && mv -f "$LEGACY_ACTIVE" "$ACTIVE" 2>/dev/null
@@ -1498,7 +1602,7 @@ active() {
     --clear) rm -f "$ACTIVE" "$LEGACY_ACTIVE"; echo "active project: none"; return 0 ;;
     "")      ;;
     -*)      bad_option active "$arg" ;;
-    *)       p=$(physical "${arg/#\~/$HOME}") || { echo "mindforge active: '$arg' is not a folder" >&2; return 2; }
+    *)       p=$(canon_dir "${arg/#\~/$HOME}") && [ -n "$p" ] || { echo "mindforge active: '$arg' is not a folder" >&2; return 2; }
              [ -x "$p/scripts/status.sh" ] || { echo "mindforge active: $p has no scripts/status.sh" >&2; return 2; }
              mkdir -p "$STATE" && printf '%s\n' "$p" > "$ACTIVE" || { echo "mindforge active: could not write $ACTIVE" >&2; return 1; }
              printf 'active project: %s\n' "$p"
@@ -1512,13 +1616,91 @@ active() {
   [ -x "$p/scripts/status.sh" ] || { echo "active project '$p' has no scripts/status.sh"; return 0; }
   local L f w
   L=$(last_wrapped); f=$(cut -f4 <<<"$L")
-  if [ -z "$chosen" ] && [ -n "$f" ] && w=$(focus_project "$f") && [ -n "$w" ] && [ "$(physical "$w")" != "$(physical "$p")" ]; then
+  if [ -z "$chosen" ] && [ -n "$f" ] && w=$(focus_project "$f") && [ -n "$w" ] && [ "$(canon_dir "$w")" != "$(canon_dir "$p")" ]; then
     printf 'ACTIVE PROJECT DISAGREES: the pointer says %s, but the last wrapped session was about %s ("%s"). Say so, and ask which one before treating either as the project in play.\n' \
       "$(basename "$p")" "$(basename "$w")" "$f"
   fi
   echo "ACTIVE PROJECT — render this to the person, they cannot see hook output."
   echo "Standing instruction: show this summary and list again after every step, and keep TODO.md current."
   bash "$p/scripts/status.sh"
+}
+
+# ── hooks · install them by hand, check them by machine (0.1.9, #19) ────────
+# Claude Code's auto mode rightly refuses to let the assistant add hooks to
+# settings.json: hooks run commands at every session start and end, so a person
+# makes that change. An assistant-driven install used to stop at the last step
+# with the hooks "pending", and pending is how they got forgotten (#16). So the
+# install is designed around it: mindForge prints the exact block for this
+# platform, the person pastes it, and `--check` (the same check the brief and
+# R10 use) says whether it took.
+#   mindforge hooks                 the same as --check
+#   mindforge hooks --check         installed / missing; exit 0, 1 missing, 2 unreadable
+#   mindforge hooks --print [--windows|--linux]   the block to paste into settings.json
+SELF=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "$0")
+on_windows() { case "${OSTYPE:-}" in msys*|cygwin*) return 0 ;; esac; return 1; }
+
+hooks_print() {
+  local win=0
+  on_windows && win=1
+  case "${1:-}" in --windows) win=1 ;; --linux) win=0 ;; "") ;; *) bad_option hooks "$1" ;; esac
+  # Windows: Claude Code runs hook commands in PowerShell unless told "bash",
+  # and PATH there is not Git Bash's -- a full path, spelled from $HOME.
+  local cmd="mindforge" shell=""
+  if [ "$win" -eq 1 ]; then
+    local s="$SELF"
+    case "$s" in "$HOME"/*) s='$HOME'"${s#"$HOME"}" ;; esac
+    cmd="\\\"$s\\\""; shell='"shell": "bash", '
+  fi
+  cat <<JSON
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume|clear",
+        "hooks": [
+          { "type": "command", ${shell}"command": "$cmd session-start", "timeout": 20, "statusMessage": "mindForge briefing..." },
+          { "type": "command", ${shell}"command": "$cmd active", "timeout": 15 }
+        ] },
+      { "matcher": "compact",
+        "hooks": [
+          { "type": "command", ${shell}"command": "cat \\"\$HOME/.claude/CLAUDE.md\\"", "timeout": 10 }
+        ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", ${shell}"command": "$cmd session-end", "timeout": 15 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", ${shell}"command": "$cmd tone" } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", ${shell}"command": "$cmd chime" } ] }
+    ]
+  }
+}
+JSON
+  printf '%s\n' "" "Paste the \"hooks\" part into $CLAUDE_DIR/settings.json (merge it with any hooks already there)," \
+    "then run: mindforge hooks --check" "SessionStart and SessionEnd are the handoff; Stop (tone), Notification (chime) and active are optional." >&2
+}
+
+hooks_cmd() {
+  case "${1:---check}" in
+    --print) shift; hooks_print "$@"; return 0 ;;
+    --check) ;;
+    *) bad_option hooks "$1" ;;
+  esac
+  local hk rc f extra=""
+  hk=$(hooks_missing); rc=$?
+  case $rc in
+    0) printf '%shooks: session-start and session-end are installed%s\n' "$G" "$O" ;;
+    1) printf '%shooks: %s -- print the block with: mindforge hooks --print%s\n' "$R" "$hk" "$O" ;;
+    2) printf '%shooks: could not check -- %s%s\n' "$R" "$hk" "$O" ;;
+  esac
+  local files=()
+  for f in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do [ -r "$f" ] && files+=("$f"); done
+  for f in tone chime active; do
+    [ ${#files[@]} -gt 0 ] && grep -qE "mindforge[^[:space:]]{0,6}[[:space:]]+$f" "${files[@]}" || extra="${extra:+$extra, }$f"
+  done
+  [ -n "$extra" ] && printf '%s  optional, not installed: %s%s\n' "$D" "$extra" "$O"
+  return $rc
 }
 
 usage() {
@@ -1538,6 +1720,8 @@ usage:
   mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook; <path> switches and shows it);
                                          wrap moves it to the project the focus names
   mindforge chime [--test]               a sound when the assistant is done and waiting
+  mindforge hooks [--check | --print [--windows|--linux]]
+                                         are the hooks installed? / the block to paste (a person installs hooks)
   mindforge session-start|session-end    (called by hooks)
   mindforge --version
 A note that starts with "-" goes after --, e.g. mindforge drift -- "-x ignored"
@@ -1551,15 +1735,26 @@ case "${2:-}" in -h|--help) usage; exit 0 ;; esac
 case "${1:-brief}" in
   -V|--version|version) printf 'mindforge %s\n' "$VERSION" ;;
   -h|--help|help) usage ;;
-  brief) [ "${2:-}" = "--headline" ] && headline || full ;;
+  brief) prime_repos; [ "${2:-}" = "--headline" ] && headline || full ;;
   wip)           shift; wip "$@" ;;
-  rot)           rot ;;
+  rot)           case "${2:-}" in
+                   "") ;;
+                   --timings) export MF_TIMINGS=1 ;;
+                   *) bad_option rot "$2" ;;
+                 esac
+                 [ -n "${MF_TIMINGS:-}" ] && t_all=$(now_ms)
+                 prime_repos
+                 [ -n "${MF_TIMINGS:-}" ] && printf 'timing\t%-9s %6d ms\n' "repo list" $(( $(now_ms) - t_all )) >&2
+                 rot
+                 [ -n "${MF_TIMINGS:-}" ] && printf 'timing\t%-9s %6d ms\n' "total" $(( $(now_ms) - t_all )) >&2
+                 true ;;
   tone)          shift; tone "$@" ;;
   chime)         shift; chime "$@" ;;
   active)        shift; active "$@" ;;
-  session-start) session_start ;;
+  hooks)         shift; hooks_cmd "$@" ;;
+  session-start) prime_repos; session_start ;;
   session-end)   session_end ;;
-  wrap)          shift; wrap "$@" ;;
+  wrap)          shift; prime_repos; wrap "$@" ;;
   drift)         shift; drift "$@" ;;
   log)           shift; log_cmd "$@" ;;
   *) usage >&2; exit 2 ;;

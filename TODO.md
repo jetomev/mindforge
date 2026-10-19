@@ -39,15 +39,15 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 ## Next up — in this order
 
 ### 1 · Windows support (the work laptop)
-- [ ] **#15** · Default memory folder is wrong on Windows.
-- [ ] **#17** · The install instructions assume Linux.
-- [ ] **#18** · Project folders outside the configured list (synced folders) are invisible.
-- [ ] **#19** · Auto mode will not let the assistant install hooks — the install has to be designed around that.
-- [ ] **#20** · Desktop notifications are Linux-only, and that isn't documented.
-- [ ] **#21** · The PowerShell wrapper breaks quoted text, so `wrap` and `drift` record the wrong thing.
-- [ ] **#65** · W-14 (laptop, 2026-10-19): 0.1.8's suite is 197/218 there, almost all the test harness on Windows — Git Bash's `ln -s` makes a copy (12, incl. the release.sh mystery from #43), MSYS paths reach Windows python (tone ×7), a test leaves a `%SystemDrive%` folder in the repo, the active pointer saved in two spellings (1, a real small one). The live tool runs clean.
-- [ ] **#38** · W-10: the parallel-lookup timing check fails on the laptop every run (still failing in #65).
-- [ ] **#64** · The PKGBUILD: python belongs in `checkdepends`, since `check()` runs the tie-alert tests.
+- [x] **#15** · Default memory folder is wrong on Windows — fixed in 0.1.9 (cygpath -w + Claude Code's rule); closes on the laptop's run (matrix B4).
+- [x] **#17** · The install instructions assume Linux — a Windows section in the README, 0.1.9.
+- [x] **#18** · Synced-folder repos — a repo can be a root itself, spaces and apostrophes tested; R1/R2 read roots with spaces, 0.1.9.
+- [x] **#19** · Hooks under auto mode — `mindforge hooks --print | --check`, the person pastes the block, 0.1.9.
+- [x] **#20** · Notifications Linux-only — documented in the Windows section, 0.1.9 (a Windows toast stays an idea, not built).
+- [x] **#21** · The PowerShell wrapper — `bin/mindforge.ps1`, 0.1.9; its check runs where PowerShell is (matrix B7).
+- [x] **#65** · W-14 (laptop, 2026-10-19): 0.1.8's suite is 197/218 there, almost all the test harness on Windows — Git Bash's `ln -s` makes a copy (12, incl. the release.sh mystery from #43), MSYS paths reach Windows python (tone ×7), a test leaves a `%SystemDrive%` folder in the repo, the active pointer saved in two spellings (1, a real small one). The live tool runs clean. **Fixed in 0.1.9**; the laptop's run closes it (matrix B2, B5).
+- [x] **#38** · W-10: the parallel-lookup timing check fails on the laptop every run (still failing in #65). **Fixed in 0.1.9**; the laptop's run closes it (matrix B2, B5).
+- [x] **#64** · The PKGBUILD: python belongs in `checkdepends`, since `check()` runs the tie-alert tests. **Fixed in 0.1.9** (+ #66, the recipe's license said GPL3).
 - [x] **#34** · The same project is counted twice on Windows — fixed in 0.1.8 with #43 (same cause).
 
 - [x] **#43** · W-11: fixed in 0.1.8 (the R11 part). The eleven `release.sh` failures on the laptop are still unexplained — the harness now prints what a failing check saw, so the next laptop run can tell us.
@@ -65,7 +65,7 @@ Decided: Option 1 (one Claude only on a server) is out as the place we work · l
 - [x] **#46** · W-12: the brief's NEXT column cut at 42 characters mid-word, and the hook's short brief didn't say it was short — fixed 2026-10-13 (width follows the terminal, cut at a word with …, nothing cut off a terminal; the hook brief names what it leaves out and the directive says to run the full one when asked). Unreleased.
 - [ ] **#47** · R8 cannot see stale queue rows: 8 of 18 rows opt out with `-` and are never checked again, and a row whose reference is still open passes even when its sentence lists finished work (found 2026-10-08: forgekit said 0.8.0, hypeForge listed done jobs). Ideas: compare a row's "X.Y.Z shipped" with the newest tag; `wrap` asks "still true?" for every project touched.
 - [ ] **#30** · A relayed handoff carried one machine's way of working to another.
-- [ ] **#31** · The test-matrix advice about sandboxes behaves differently on every machine.
+- [x] **#31** · The sandbox advice — an explicit export now beats the config (vault included), tested both ways, 0.1.9.
 
 ---
 

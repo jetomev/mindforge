@@ -20,8 +20,28 @@ TAG="v$VER"
 LOGS="$ROOT/logs"
 mkdir -p "$LOGS"
 LOG="$LOGS/release-$(date +%Y%m%d-%H%M%S).log"
-ln -sfn "$(basename "$LOG")" "$LOGS/release-latest.log"
+LATEST="$LOGS/release-latest.log"
+# #65 (W-14) · Git Bash's `ln -s` does not make a link: it COPIES the target,
+# and this target did not exist yet, so ln failed and `set -e` ended the run on
+# its first line -- eleven release checks failed on the laptop for that alone.
+# Where a real link can be made, -latest is a link; elsewhere it is a copy of
+# the log, written when the run ends.
+: > "$LOG"
+rm -f "$LATEST"
+if ln -s "$(basename "$LOG")" "$LATEST" 2>/dev/null && [ -L "$LATEST" ]; then
+  LINKED=1
+else
+  rm -f "$LATEST"; LINKED=0
+fi
 exec > >(tee "$LOG") 2>&1
+TEE_PID=$!
+copy_latest() {
+  [ "$LINKED" -eq 1 ] && return 0
+  exec 1>&- 2>&-
+  wait "$TEE_PID" 2>/dev/null || true
+  cp -f "$LOG" "$LATEST" 2>/dev/null || true
+}
+trap copy_latest EXIT
 
 refuse() { printf 'release: REFUSED -- %s\nNothing was tagged or pushed.\n' "$1"; exit 1; }
 

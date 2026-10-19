@@ -19,8 +19,23 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # with a bug planted on purpose, to prove the checks can see it.
 MF="${MINDFORGE_UNDER_TEST:-$ROOT/bin/mindforge}"
 FILTER="${1:-}"
-PASS=0 FAIL=0 XFAIL=0 XPASS=0 RAN=0
+PASS=0 FAIL=0 XFAIL=0 XPASS=0 RAN=0 SKIP=0
 FAILED=()
+
+# #65 (W-14, item 3) · A Windows program started under `env -i` has no
+# SystemDrive, and writes its cache into a literal %SystemDrive% folder in the
+# CURRENT directory -- which was the repo, and the next brief called mindForge
+# dirty. Two fixes: the few variables Windows itself needs go through every
+# `env -i` here (WINENV), and the whole run happens from a scratch folder.
+# The repo is also compared before and after; a run that leaves anything
+# behind in it fails (see the verdict).
+WINENV=()
+while IFS= read -r _v; do
+  case "${_v^^}" in SYSTEMROOT|SYSTEMDRIVE|WINDIR|TEMP|TMP|COMSPEC|PATHEXT) WINENV+=("$_v=${!_v}") ;; esac
+done < <(compgen -e)
+unset _v
+REPO_BEFORE=$(git -C "$ROOT" status --porcelain --untracked-files=all 2>/dev/null)
+RUN_DIR=$(mktemp -d); cd "$RUN_DIR" || exit 2
 
 # ------------------------------------------------------------------ sandbox --
 # SB/home        HOME -- no .config/mindforge/config, so nothing overrides us
@@ -47,9 +62,9 @@ STUB
 # the caller's CLAUDE_CODE_SESSION_ID and FORCE_COLOUR are deliberately dropped.
 mf() {
   # TZ only when set: an EMPTY TZ means UTC, which moves "now" by hours.
-  env -i PATH="$SB/bin:$PATH" HOME="$SB/home" ${TZ:+TZ="$TZ"} \
+  env -i "${WINENV[@]}" PATH="$SB/bin:$PATH" HOME="$SB/home" ${TZ:+TZ="$TZ"} \
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="${SB_PROJECTS:-$SB/projects}" \
-    MINDFORGE_MEMORY="$SB/mem" CLAUDE_CODE_SESSION_ID="$SID" \
+    MINDFORGE_MEMORY="${SB_MEM-$SB/mem}" CLAUDE_CODE_SESSION_ID="$SID" \
     SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
     ${COLUMNS:+COLUMNS="$COLUMNS"} \
     MINDFORGE_CHIME="${MINDFORGE_CHIME:-/nonexistent-chime}" MINDFORGE_CHIME_PLAYER="${MINDFORGE_CHIME_PLAYER:-}" \
@@ -95,6 +110,30 @@ check() {
     # lines of what the check looked at go with the verdict.
     [ -n "${out:-}" ] && head -4 <<<"$out" | sed 's/^/         | /'
   fi
+}
+# skip <name> <why> -- the check could not be made here. Never a pass, never
+# a failure: said out loud and counted on its own (#24's third answer).
+skip() {
+  SKIP=$((SKIP+1)); printf '  skip   %s -- could not look: %s\n' "$CUR: $1" "$2"
+}
+# make_link <target> <link> -- a REAL link, or status 1. #65 (W-14, item 1):
+# Git Bash's `ln -s` silently COPIES unless told otherwise, so a "link" taken
+# before a change never shows it. Tried in order: ln -s; ln -s with native
+# Windows links (needs Developer Mode); a directory junction. Each is proven
+# by changing the target and looking through the link.
+make_link() {
+  local target="$1" link="$2" probe=".mf-link-probe-$$"
+  link_works() { : > "$target/$probe"; local ok=1; [ -e "$link/$probe" ] && ok=0; rm -f "$target/$probe"; return $ok; }
+  rm -rf "$link"
+  ln -s "$target" "$link" 2>/dev/null && link_works && return 0
+  rm -rf "$link"
+  MSYS=winsymlinks:nativestrict ln -s "$target" "$link" 2>/dev/null && link_works && return 0
+  rm -rf "$link"
+  if command -v cygpath >/dev/null 2>&1 && command -v cmd >/dev/null 2>&1; then
+    cmd //c mklink /J "$(cygpath -w "$link")" "$(cygpath -w "$target")" >/dev/null 2>&1 && link_works && return 0
+    rm -rf "$link"
+  fi
+  return 1
 }
 xfail() {
   local issue="$1" name="$2"; shift 2
@@ -476,8 +515,18 @@ fi
 if begin "rot: lookups in parallel"; then
   for r in a1 a2 a3; do gh_repo $r; done
   printf 'a1\tt\t3\t-\t#1\na2\tt\t3\t-\t#2\na3\tt\t3\t-\t#3\n' > "$SB/state/queue.md"
-  t0=$(date +%s); SB_GH_SLEEP=2 SB_GH_STATE=OPEN mf rot >/dev/null; t1=$(date +%s)
-  check "three 2s lookups take under 5s"   [ $((t1-t0)) -lt 5 ]
+  # #38 · "under 5s" measured the machine, not the design: on the work laptop
+  # the rest of rot alone took longer, so it failed every run and never said by
+  # how much. Now the same rot is timed with an instant tracker first; the
+  # three 2s lookups may add at most 4s on top (one at a time they add 6s+).
+  ms() { local n; n=$(date +%s%N); echo $(( n / 1000000 )); }
+  t0=$(ms); SB_GH_SLEEP=0 SB_GH_STATE=OPEN mf rot >/dev/null; t1=$(ms)
+  rm -f "$SB/state/queue-refs.cache"
+  t2=$(ms); SB_GH_SLEEP=2 SB_GH_STATE=OPEN mf rot >/dev/null; t3=$(ms)
+  base=$((t1-t0)) slow=$((t3-t2))
+  out="rot with an instant tracker: ${base} ms; with three 2s lookups: ${slow} ms (+$((slow-base)) ms)"
+  check "three 2s lookups add under 4s, not 6s+" [ $((slow-base)) -lt 4000 ]
+  printf '         | %s\n' "$out"
   check "and all three were cached"        [ "$(grep -c OPEN "$SB/state/queue-refs.cache")" -eq 3 ]
   end
 fi
@@ -635,7 +684,9 @@ fi
 # really differ in the sandbox, or the checks below prove nothing.
 if begin "one repo under two spellings of its path"; then
   make_repo listed; make_repo forgotten
-  ln -s "$SB/projects" "$SB/link"
+  if ! make_link "$SB/projects" "$SB/link"; then
+    skip "the two-spellings checks" "no way to make a folder link on this machine (ln -s copies, no junction)"
+  else
   printf 'listed\tthe task\t3\tno\t-\n' > "$SB/state/queue.md"
   check "setup: git spells the repo differently from the listing" \
     [ "$(git -C "$SB/link/listed" rev-parse --show-toplevel)" != "$SB/link/listed" ]
@@ -646,6 +697,7 @@ if begin "one repo under two spellings of its path"; then
   check "R11 does not name the queued repo (#43)"          bash -c '! grep -q "R11.*listed has" <<<"$1"' _ "$out"
   check "R11 still names the forgotten one"                grep -q 'R11.*forgotten has commits' <<<"$out"
   check "R3 counts the unpushed repo once, not twice (#34)" [ "$(grep -c 'R3.*listed has 1 unpushed' <<<"$out")" -eq 1 ]
+  fi
   end
 fi
 
@@ -679,7 +731,7 @@ rel_repo() {   # rel_repo <version in bin/mindforge> <changelog version> <tests 
   "${g[@]}" -C "$SB/rel" commit -qm init
   "${g[@]}" -C "$SB/rel" push -q origin main 2>/dev/null
 }
-rel_run() { env -i PATH="$PATH" HOME="$SB/home" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+rel_run() { env -i "${WINENV[@]}" PATH="$PATH" HOME="$SB/home" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t bash "$SB/rel/scripts/release.sh" "$@" 2>&1; }
 no_tag()  { [ -z "$(git -C "$SB/rel" tag)" ] && [ -z "$(git -C "$SB/rel" ls-remote --tags origin)" ]; }
 if begin "release.sh refuses before tagging"; then
@@ -715,7 +767,9 @@ if begin "release.sh tags the right commit"; then
   check "the tag is on origin"                        grep -q 'refs/tags/v0.2.0' <<<"$(git -C "$SB/rel" ls-remote --tags origin)"
   check "the tagged commit says VERSION 0.2.0"        grep -q '^VERSION="0.2.0"' <<<"$(git -C "$SB/rel" show v0.2.0:bin/mindforge)"
   check "the tag message is the changelog entry"      bash -c 'git -C "$1" tag -l --format="%(contents)" v0.2.0 | grep -q "The entry." && ! git -C "$1" tag -l --format="%(contents)" v0.2.0 | grep -q Old' _ "$SB/rel"
-  check "the run is logged with a -latest link"       [ -L "$SB/rel/logs/release-latest.log" ]
+  # #65 (W-14) · a link where links work, a copy of the run's log where they do not
+  check "the run is logged with a -latest link or copy" bash -c '[ -L "$1" ] || { [ -s "$1" ] && cmp -s "$1" "$(ls -t "$(dirname "$1")"/release-2*.log | head -1)"; }' _ "$SB/rel/logs/release-latest.log"
+  check "the -latest log holds the whole run"         grep -q '^OK$' "$SB/rel/logs/release-latest.log"
   end
 fi
 
@@ -793,7 +847,7 @@ if begin "tone finds a python that runs"; then
   printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$REAL_PY" > "$SB/bin/python"
   chmod +x "$SB/bin/python3" "$SB/bin/python"
   check "setup: the python3 on PATH refuses to run" \
-    bash -c '! env -i PATH="$1:$PATH" python3 -c pass 2>/dev/null' _ "$SB/bin"
+    bash -c 'p=$1; shift; ! env -i "$@" PATH="$p:$PATH" python3 -c pass 2>/dev/null' _ "$SB/bin" "${WINENV[@]}"
   printf '## Heading\n\nExpected result: a line.\n' > "$SB/memo.md"
   out=$(mf tone --check "$SB/memo.md"); rc=$?
   check "the memo is still caught through \`python\` (exit 1)" [ "$rc" -eq 1 ]
@@ -828,10 +882,12 @@ if begin "active project"; then
   check "the banner runs the status script"      grep -q 'status of listed' <<<"$out"
   check "no disagreement with nothing wrapped"   bash -c '! grep -q DISAGREES <<<"$1"' _ "$out"
   now_mark; out=$(mf wrap "paperwork, nothing in particular" "b1")
-  check "a focus naming no project leaves the pointer" [ "$(mf active --show)" = "$SB/projects/listed" ]
+  check "a focus naming no project leaves the pointer" [ "$(mf active --show)" = "$(git -C "$SB/projects/listed" rev-parse --show-toplevel)" ]
   now_mark; out=$(mf wrap "other: the whole afternoon" "b1|b2")
   check "setup: the wrap was recorded"           grep -q 'other: the whole afternoon' "$SB/state/sessions.log"
-  check "wrap moves the pointer to the project the focus names" [ "$(mf active --show)" = "$SB/projects/other" ]
+  # #65 (W-14, item 4) · the pointer is stored in git's spelling, whoever writes it
+  other_git=$(git -C "$SB/projects/other" rev-parse --show-toplevel)
+  check "wrap moves the pointer to the project the focus names" [ "$(mf active --show)" = "$other_git" ]
   check "wrap says so"                           grep -q 'active project: other' <<<"$out"
   check "the banner follows"                     grep -q 'status of other' <<<"$(mf active)"
   mf active "$SB/projects/listed" >/dev/null     # a stale pointer, set by hand
@@ -844,6 +900,8 @@ if begin "active project"; then
   check "a project just chosen is no disagreement"        bash -c '! grep -q DISAGREES <<<"$1"' _ "$out"
   printf '%s\n' "$SB/projects/other" > "$SB/home/.claude/active-project"; rm "$SB/state/active-project"
   check "the 2026-09-23 pointer file is adopted"  [ "$(mf active --show)" = "$SB/projects/other" ]
+  mf active "$SB/projects/other" >/dev/null
+  check "active <path> stores the same spelling wrap does" [ "$(mf active --show)" = "$other_git" ]
   check "and moved into the state folder"        [ ! -e "$SB/home/.claude/active-project" ] && [ -s "$SB/state/active-project" ]
   mf active --clear >/dev/null
   check "--clear: silence again"                 [ -z "$(mf active)" ]
@@ -862,6 +920,130 @@ if begin "chime"; then
   end
 fi
 
+# ------------------------------------------------------------ 0.1.9 (Windows)
+# #15 · The memory folder Claude Code really uses. Staged with a cygpath stub
+# that answers what Git Bash's would: the Windows spelling of HOME.
+if begin "memory folder: Claude Code's spelling (#15)"; then
+  printf '#!/usr/bin/env bash\n[ "$1" = -w ] && { echo '"'"'C:\\Users\\test'"'"'; exit 0; }\n[ "$1" = -m ] && { echo "$2"; exit 0; }\nexit 1\n' > "$SB/bin/cygpath"
+  chmod +x "$SB/bin/cygpath"
+  mkdir -p "$SB/home/.claude/projects/C--Users-test/memory"
+  printf 'x\n' > "$SB/home/.claude/projects/C--Users-test/memory/a.md"
+  printf -- '- [a](a.md)\n' > "$SB/home/.claude/projects/C--Users-test/memory/MEMORY.md"
+  out=$(SB_MEM="" mf brief | sed -n '/^State/,/^$/p')
+  check "on Windows: C:\\Users\\test is read from C--Users-test" grep -q 'memory     2 files' <<<"$out"
+  rm "$SB/bin/cygpath"
+  enc=$(printf '%s' "$SB/home" | sed 's/[^A-Za-z0-9]/-/g')
+  mkdir -p "$SB/home/.claude/projects/$enc/memory"; printf 'x\n' > "$SB/home/.claude/projects/$enc/memory/b.md"
+  out=$(SB_MEM="" mf brief | sed -n '/^State/,/^$/p')
+  check "elsewhere: every non-letter, non-digit becomes -" grep -q 'memory     1 files' <<<"$out"
+  out=$(SB_MEM="$SB/nowhere" mf brief | sed -n '/^State/,/^$/p')
+  check "a missing folder is named, not counted as 0" grep -q "memory     not found at $SB/nowhere" <<<"$out"
+  end
+fi
+
+# #31 · An explicit export beats the config. A config that points state and the
+# vault at decoys must not pull a sandboxed run onto them.
+if begin "config never overrides an export (#31)"; then
+  mkdir -p "$SB/home/.config/mindforge" "$SB/decoy" "$SB/decoyvault"
+  printf 'MINDFORGE_STATE="%s"\nMINDFORGE_VAULT="%s"\nMINDFORGE_ALWAYS_MAX=1\n' "$SB/decoy" "$SB/decoyvault" > "$SB/home/.config/mindforge/config"
+  mf wip "the note" >/dev/null
+  check "the exported state is used"            [ -s "$SB/state/wip.md" ]
+  check "the config's state is not"             [ ! -e "$SB/decoy/wip.md" ]
+  now_mark; mf wrap "focus" "b1" >/dev/null
+  check "the exported (empty) vault wins too"   bash -c '! grep -q "vault" <<<"$1"' _ "$(tail -1 "$SB/state/sessions.log")"
+  out=$(env -i "${WINENV[@]}" PATH="$SB/bin:$PATH" HOME="$SB/home" bash "$MF" wip --show)
+  check "with nothing exported, the config still applies" [ "$out" = "nothing in flight" ]
+  printf 'a\tb\n' > "$SB/decoy/wip.md"
+  out=$(env -i "${WINENV[@]}" PATH="$SB/bin:$PATH" HOME="$SB/home" bash "$MF" wip --show)
+  check "setup: the config's own state really is the decoy" grep -q 'b' <<<"$out"
+  end
+fi
+
+# #18 · A repo in a synced folder: a path with spaces and an apostrophe, given
+# directly as a root (it is itself the repo), no junction.
+if begin "a repo given as a root, spaces and an apostrophe (#18)"; then
+  make_repo alpha
+  synced="$SB/Dropbox (Work)/it's here"
+  mkdir -p "$synced"; mv "$SB/projects/alpha" "$synced/alpha"
+  make_repo beta
+  out=$(SB_PROJECTS="$SB/projects:$synced/alpha" mf brief --headline)
+  check "the headline counts it: 2 repos"       grep -q 'git: 2 repos clean' <<<"$out"
+  printf 'alpha\tthe task\t3\tno\t-\n' > "$SB/state/queue.md"
+  out=$(SB_PROJECTS="$SB/projects:$synced/alpha" mf rot)
+  check "a queue name finds it (no R6)"         bash -c '! grep -q "R6.*alpha" <<<"$1"' _ "$out"
+  git -c user.name=t -c user.email=t@t -C "$synced/alpha" commit -q --allow-empty -m fresh
+  rm "$SB/state/queue.md"; printf 'beta\tthe task\t3\tno\t-\n' > "$SB/state/queue.md"
+  out=$(SB_PROJECTS="$SB/projects:$synced/alpha" mf rot)
+  check "R3 sees its unpushed commit"           grep -q 'R3.*alpha has 1 unpushed' <<<"$out"
+  check "R11 sees it is missing from the queue" grep -q 'R11.*alpha has commits' <<<"$out"
+  mkdir -p "$synced/withpkg"; printf 'pkgver=0.1.0\n' > "$synced/withpkg/PKGBUILD"
+  git -c init.defaultBranch=main init -q "$synced/withpkg"
+  git -c user.name=t -c user.email=t@t -C "$synced/withpkg" commit -q --allow-empty -m one
+  git -c user.name=t -c user.email=t@t -C "$synced/withpkg" tag -a -m v v0.2.0
+  out=$(SB_PROJECTS="$synced" mf rot)
+  check "R1 reads a root with spaces in it"     grep -q 'R1.*withpkg says 0.1.0, latest tag is 0.2.0' <<<"$out"
+  end
+fi
+
+# #19 · Hooks are installed by a person; mindForge prints the block and checks it.
+if begin "hooks --print / --check (#19)"; then
+  out=$(mf hooks --check); rc=$?
+  check "nothing installed: says so, exit 1"   [ "$rc" -eq 1 ] && grep -q 'NOT INSTALLED: session-start, session-end' <<<"$out"
+  mf hooks --print --linux 2>/dev/null > "$SB/home/.claude/settings.json"
+  check "the Linux block is valid JSON"         "$PY" -c 'import json,sys; json.load(open(sys.argv[1]))' "$SB/home/.claude/settings.json"
+  check "the Linux block has no shell key"      bash -c '! grep -q "\"shell\"" "$1"' _ "$SB/home/.claude/settings.json"
+  out=$(mf hooks --check); rc=$?
+  check "the printed block passes --check"      [ "$rc" -eq 0 ] && grep -q 'are installed' <<<"$out"
+  check "and the brief's own check agrees"      bash -c '! grep -q "^hooks:" <<<"$1"' _ "$(mf brief --headline)"
+  out=$(mf hooks --print --windows 2>/dev/null)
+  check "the Windows block is valid JSON"       "$PY" -c 'import json,sys; json.loads(sys.stdin.read())' <<<"$out"
+  check "every Windows hook runs in bash"       [ "$(grep -c '"shell": "bash"' <<<"$out")" -eq 6 ]
+  check "with the script's full path"           grep -q "\\\\\"[^\"]*mindforge\\\\\" session-start" <<<"$out"
+  end
+fi
+
+# #21 · The PowerShell wrapper hands every argument to bash intact. Run only
+# where PowerShell is (the laptop); elsewhere it says it could not look.
+if begin "PowerShell wrapper (#21)"; then
+  PS=$(command -v pwsh || command -v powershell || command -v powershell.exe || true)
+  if [ -z "$PS" ]; then
+    skip "wrap 'a b' 'c|d' arrives as two arguments" "no PowerShell on this machine"
+  else
+    mkdir -p "$SB/w"; cp "$ROOT/bin/mindforge.ps1" "$SB/w/"
+    printf '#!/usr/bin/env bash\nfor a in "$@"; do printf "[%%s]\\n" "$a"; done\n' > "$SB/w/mindforge"
+    wps="$SB/w/mindforge.ps1"; command -v cygpath >/dev/null 2>&1 && wps=$(cygpath -w "$wps")
+    out=$(MINDFORGE_BASH="$(command -v bash)" "$PS" -NoProfile -File "$wps" wrap 'Focus with spaces' 'b1|b2' "it's here" 2>&1)
+    check "every argument arrives whole"        [ "$out" = "$(printf '[wrap]\n[Focus with spaces]\n[b1|b2]\n[it'"'"'s here]')" ]
+  fi
+  end
+fi
+
+# #38 · Where the time goes, per rule.
+if begin "rot --timings (#38)"; then
+  make_repo alpha
+  out=$(mf rot --timings 2>&1 >/dev/null)
+  for r in "repo list" tracker R1 R2 R3 R4 R5 R8 R10 R11 R7 R9 total; do
+    check "times $r"                            grep -qE "^timing	$r +[0-9]+ ms" <<<"$out"
+  done
+  check "stdout is the plain rot"               [ "$(mf rot --timings 2>/dev/null)" = "$(mf rot)" ]
+  check "an unknown option is refused"          bash -c '! "$@" 2>/dev/null' _ mf rot --bogus
+  end
+fi
+
+# #65 (W-14, item 2) · A transcript path in Git Bash's spelling reaches a Windows
+# python that cannot open it. Staged with a cygpath stub that knows the way.
+if begin "tone: a Git Bash transcript path (#65)"; then
+  fake_transcript "$SB/t.jsonl" "Here's where it all stands."
+  printf '#!/usr/bin/env bash\n[ "$1" = -m ] && [ "$2" = /msys/t.jsonl ] && { echo "%s/t.jsonl"; exit 0; }\nexit 1\n' "$SB" > "$SB/bin/cygpath"
+  chmod +x "$SB/bin/cygpath"
+  out=$(hook_json "/msys/t.jsonl" | mf tone)
+  check "the path is translated and the memo caught" grep -q '"decision": *"block"' <<<"$out"
+  rm "$SB/bin/cygpath"
+  out=$(hook_json "/msys/t.jsonl" | mf tone); rc=$?
+  check "setup: without cygpath the same path is silent" [ -z "$out" ] && [ "$rc" -eq 0 ]
+  end
+fi
+
 # ================================================================== verdict ==
 REAL_AFTER=$(snap "$REAL_STATE")
 echo
@@ -869,11 +1051,20 @@ if [ "$REAL_BEFORE" != "$REAL_AFTER" ]; then
   echo "ISOLATION BROKEN: the real state at $REAL_STATE changed during the run" >&2
   FAIL=$((FAIL+1)); FAILED+=("isolation: real state changed")
 fi
+cd "$ROOT" && rm -rf "$RUN_DIR"
+REPO_AFTER=$(git -C "$ROOT" status --porcelain --untracked-files=all 2>/dev/null)
+if [ "$REPO_BEFORE" != "$REPO_AFTER" ]; then
+  echo "REPO CHANGED: the run left this behind in $ROOT:" >&2
+  diff <(printf '%s\n' "$REPO_BEFORE") <(printf '%s\n' "$REPO_AFTER") | grep '^>' | sed 's/^> /  /' >&2
+  FAIL=$((FAIL+1)); FAILED+=("isolation: the run changed the repo")
+fi
 if [ "$RAN" -eq 0 ]; then
   echo "NO CHECKS RAN${FILTER:+ (filter: $FILTER)} -- this is not a pass" >&2; exit 2
 fi
-printf '%d checks · %d passed · %d failed · %d expected failures (known, filed) · %d unexpectedly passing\n' \
+printf '%d checks · %d passed · %d failed · %d expected failures (known, filed) · %d unexpectedly passing' \
   "$RAN" "$PASS" "$FAIL" "$XFAIL" "$XPASS"
+[ "$SKIP" -gt 0 ] && printf ' · %d could not look here (skipped, see above)' "$SKIP"
+echo
 printf 'real state untouched: %s\n' "$REAL_STATE"
 if [ ${#FAILED[@]} -gt 0 ]; then
   printf '  ! %s\n' "${FAILED[@]}"; exit 1
