@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: one project's TODO as a board beside the chat — a sticky summary, then its stages in order, each
-   with a progress bar and its steps; finished stages fold to one line. KognogOS's board look, for every project. */
+   with a progress bar and its steps. Three filters on top — Pending, Finished, All — the same on every board. */
 :root {
   --bg: #f4f3f8; --panel: #ffffff; --panel-2: #ecebf3; --line: #d9d7e4; --fg: #26243a; --muted: #6a6782;
   --accent: #7a3fe0; --accent-soft: #ebe1fb; --done: #2e8b57; --done-soft: #dcf2e4; --warn: #b07a10; --warn-soft: #f7ecd2;
@@ -30,6 +30,7 @@ h1 { font-size: 1.6rem; font-weight: 700; }
 .meter span { display: block; height: 100%; background: var(--done); transition: width .25s ease; }
 .chip { font: 500 0.8rem var(--sans); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.filters { display: flex; gap: 6px; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .notice { margin-top: 16px; padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); }
 .empty { padding: 40px 0; color: var(--muted); text-align: center; }
@@ -39,7 +40,6 @@ ol.stages { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 
 .stage.complete .no { color: var(--done); }
 .body { min-width: 0; border-left: 2px solid var(--line); padding-left: 14px; }
 .stage h2 { font-size: 1.08rem; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.fold { font: 500 0.75rem var(--sans); color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline dotted; }
 .prog { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; font: 0.75rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .prog .bar { flex: 0 1 180px; height: 6px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
 .prog .bar span { display: block; height: 100%; background: var(--done); }
@@ -79,7 +79,11 @@ ul.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   <div class="top">
     <div class="sum" id="sum"></div>
     <div class="meter" aria-hidden="true"><span id="meter" style="width:0"></span></div>
-    <button class="chip" type="button" id="showall" aria-pressed="false">Show finished stages</button>
+    <div class="filters" role="group" aria-label="Show">
+      <button class="chip" type="button" data-filter="pending">Pending</button>
+      <button class="chip" type="button" data-filter="finished">Finished</button>
+      <button class="chip" type="button" data-filter="all">All</button>
+    </div>
   </div>
   <div id="notice" class="notice" hidden></div>
   <div id="board"><p class="empty">The board is loading…</p></div>
@@ -96,12 +100,18 @@ ul.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 
 <script>
 const $ = (id) => document.getElementById(id);
-let db = null, canWrite = true, meta = null, stages = new Map(), showAll = false;
-const open = new Set(), busy = new Set(), editing = new Set();
-try { showAll = localStorage.getItem("board-showall") === "1"; } catch {}
-$("showall").setAttribute("aria-pressed", showAll);
-$("showall").onclick = () => { showAll = !showAll; $("showall").setAttribute("aria-pressed", showAll);
-  try { localStorage.setItem("board-showall", showAll ? "1" : "0"); } catch {} render(); };
+let db = null, canWrite = true, meta = null, stages = new Map(), filter = "pending";
+const busy = new Set(), kept = new Set();       // kept: steps ticked in this view stay on screen until the filter changes
+try { const f = localStorage.getItem("board-filter"); if (["pending", "finished", "all"].includes(f)) filter = f; } catch {}
+const chips = document.querySelectorAll(".filters .chip");
+function setFilter(f) {
+  filter = f; kept.clear();
+  chips.forEach(c => c.setAttribute("aria-pressed", c.dataset.filter === f ? "true" : "false"));
+  try { localStorage.setItem("board-filter", f); } catch {}
+}
+chips.forEach(c => c.onclick = () => { setFilter(c.dataset.filter); render(); });
+setFilter(filter);
+const shows = (s, it, k) => filter === "all" || kept.has(s.id + ":" + k) || (filter === "pending" ? !it.done : !!it.done);
 
 function show(words) { const n = $("notice"); n.textContent = words; n.hidden = false; }
 function ordered() { return [...stages.values()].sort((a, b) => (a.order ?? 999) - (b.order ?? 999)); }
@@ -122,27 +132,20 @@ function render() {
   const ol = document.createElement("ol"); ol.className = "stages";
   list.forEach((s, i) => {
     const items = s.items || [], d = items.filter(x => x.done).length, complete = items.length && d === items.length;
-    if (complete && !showAll && !open.has(s.id)) {
-      const li = document.createElement("li"); li.className = "stage complete";
-      li.innerHTML = `<div class="no"></div><div class="body"><h2><span></span><button class="fold" type="button">show its ${items.length} steps</button></h2></div>`;
-      li.querySelector(".no").textContent = "✓"; li.querySelector("h2 span").textContent = s.name;
-      li.querySelector(".fold").onclick = () => { open.add(s.id); render(); };
-      ol.appendChild(li); return;
-    }
+    if (filter !== "all" && !items.some((it, k) => shows(s, it, k))) return;   // nothing in this stage matches the filter
     const li = document.createElement("li"); li.className = "stage" + (complete ? " complete" : "");
     li.innerHTML = `<div class="no"></div><div class="body"><h2><span></span></h2>
       <div class="prog"><div class="bar"><span></span></div><span class="n"></span></div><ul class="steps"></ul></div>`;
     li.querySelector(".no").textContent = String(i + 1).padStart(2, "0");
     li.querySelector("h2 span").textContent = s.name;
-    if (complete) { const f = document.createElement("button"); f.className = "fold"; f.type = "button"; f.textContent = "fold";
-      f.onclick = () => { open.delete(s.id); render(); }; li.querySelector("h2").appendChild(f); }
     li.querySelector(".prog .bar span").style.width = (items.length ? 100 * d / items.length : 0) + "%";
     li.querySelector(".prog .n").textContent = `${d} of ${items.length} done`;
     const ul = li.querySelector("ul");
-    items.forEach((it, k) => ul.appendChild(stepRow(s, it, k)));
+    items.forEach((it, k) => { if (shows(s, it, k)) ul.appendChild(stepRow(s, it, k)); });
     ol.appendChild(li);
   });
-  box.appendChild(ol);
+  if (!ol.children.length) box.innerHTML = `<p class="empty">${filter === "pending" ? "Nothing pending — every step is done." : "Nothing finished yet."}</p>`;
+  else box.appendChild(ol);
   const sel = $("add-stage"), keep = sel.value; sel.innerHTML = "";
   for (const s of list) { const o = document.createElement("option"); o.value = s.id; o.textContent = s.name; sel.appendChild(o); }
   if (keep) sel.value = keep; else if (now) sel.value = now.id;
@@ -155,7 +158,7 @@ function stepRow(s, it, k) {
   tick.setAttribute("aria-pressed", it.done ? "true" : "false");
   tick.setAttribute("aria-label", (it.done ? "Not done: " : "Done: ") + it.title);
   tick.disabled = !(db && canWrite);
-  tick.onclick = () => change(s.id, k, { done: !it.done, doneAt: it.done ? null : new Date().toISOString() });
+  tick.onclick = () => kept.add(s.id + ":" + k) && change(s.id, k, { done: !it.done, doneAt: it.done ? null : new Date().toISOString() });
   li.querySelector(".t").textContent = it.title;
   if (it.detail) { const d = document.createElement("div"); d.className = "d"; d.textContent = it.detail; li.appendChild(d); }
   const meta = document.createElement("div"); meta.className = "meta";
