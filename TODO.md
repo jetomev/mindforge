@@ -7,6 +7,9 @@ mindForge is the start-of-session briefing and end-of-session record for working
 **Updated after every step.** The full story behind each item is in its GitHub issue.
 
 ---
+## Found 2026-10-22 — the CLAUDE.md review
+*Spotted while writing this project's CLAUDE.md; the maintainer asked for them on the board.*
+- [ ] **README tells people to copy `scrub.example`**, which doesn't exist in the repo: add the example file or fix the line
 
 ## 2026-10-22 · Boards (unreleased)
 - [x] **Every project's page beside the chat** (the maintainer: *"for all projects we have, the same page… opened as soon as we call a project"*): `boards/board.py` (build · status · pull) + `boards/board.html`; `mindforge active` and the one-project brief open the board first; 24 project boards published and filled from their TODO.md; checks 293 → 298 (the new ones seen failing on the old build)
