@@ -4,6 +4,15 @@ Newest first.
 
 ## Unreleased
 
+- 🗺 **Boards: every project's page beside the chat.** The maintainer: *"all projects need their own project
+  page, and be opened as soon as we call a project."* `boards/board.py build` turns a project's TODO.md into a
+  page (one Artifact per project, `boards/board.html`: its sections as stages, its checkboxes as steps, Done
+  ticks, notes, new steps); `boards/board.py pull` brings ticks and new steps made on the page back into
+  TODO.md, which stays the record. A `.board` file holds the page's address. `mindforge active` and the
+  one-project brief now print **"BOARD — open it beside the chat FIRST"** for any project with one, and a
+  project with a board but no `scripts/status.sh` is accepted and summarised from its TODO.md. 5 new checks
+  (4 of them seen failing on the previous build); 298 in all.
+
 - 🧹 **The terminal copy of the briefing is gone (F-26).** `session-start` wrote a
   coloured copy to `/dev/tty`, and in seven weeks it never appeared. Under
   Desktop, Claude Code runs with no controlling terminal (its processes show TT

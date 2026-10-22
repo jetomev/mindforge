@@ -1,0 +1,217 @@
+<title>Project Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one project's TODO as a board beside the chat — a sticky summary, then its stages in order, each
+   with a progress bar and its steps; finished stages fold to one line. KognogOS's board look, for every project. */
+:root {
+  --bg: #f4f3f8; --panel: #ffffff; --panel-2: #ecebf3; --line: #d9d7e4; --fg: #26243a; --muted: #6a6782;
+  --accent: #7a3fe0; --accent-soft: #ebe1fb; --done: #2e8b57; --done-soft: #dcf2e4; --warn: #b07a10; --warn-soft: #f7ecd2;
+  --sans: "IBM Plex Sans", "Noto Sans", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1b1a26; --panel: #24232f; --panel-2: #2c2b39; --line: #3a3849; --fg: #e6e3f2; --muted: #a29fb8;
+  --accent: #c7a6f7; --accent-soft: #3a2f55; --done: #8ed7a6; --done-soft: #23402f; --warn: #f0c46a; --warn-soft: #4a3d1e; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1b1a26; --panel: #24232f; --panel-2: #2c2b39; --line: #3a3849; --fg: #e6e3f2; --muted: #a29fb8;
+  --accent: #c7a6f7; --accent-soft: #3a2f55; --done: #8ed7a6; --done-soft: #23402f; --warn: #f0c46a; --warn-soft: #4a3d1e; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 60px; }
+h1, h2 { margin: 0; text-wrap: balance; }
+h1 { font-size: 1.6rem; font-weight: 700; }
+.lede { color: var(--muted); margin: 6px 0 0; max-width: 68ch; }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 12px 10px;
+       border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.sum { font: 0.82rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.sum b { color: var(--fg); }
+.meter { flex: 1 1 160px; height: 8px; border-radius: 5px; background: var(--panel-2); overflow: hidden; min-width: 120px; }
+.meter span { display: block; height: 100%; background: var(--done); transition: width .25s ease; }
+.chip { font: 500 0.8rem var(--sans); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { margin-top: 16px; padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); }
+.empty { padding: 40px 0; color: var(--muted); text-align: center; }
+ol.stages { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 18px; }
+.stage { display: grid; grid-template-columns: 2.8rem 1fr; gap: 0 12px; }
+.no { font: 700 1.35rem var(--mono); color: var(--accent); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.stage.complete .no { color: var(--done); }
+.body { min-width: 0; border-left: 2px solid var(--line); padding-left: 14px; }
+.stage h2 { font-size: 1.08rem; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.fold { font: 500 0.75rem var(--sans); color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline dotted; }
+.prog { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; font: 0.75rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.prog .bar { flex: 0 1 180px; height: 6px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.prog .bar span { display: block; height: 100%; background: var(--done); }
+ul.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.step { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 3px 0; }
+.step[data-depth="1"] { margin-left: 1.4rem; } .step[data-depth="2"] { margin-left: 2.8rem; } .step[data-depth="3"] { margin-left: 4.2rem; }
+.tick { width: 1.15rem; height: 1.15rem; margin-top: 2px; border-radius: 4px; border: 1.5px solid var(--line); background: var(--panel); cursor: pointer;
+        padding: 0; font: 700 0.75rem var(--sans); color: transparent; line-height: 1; }
+.tick[aria-pressed="true"] { background: var(--done); border-color: var(--done); color: var(--bg); }
+.tick[disabled] { cursor: default; }
+.t { font-weight: 500; min-width: 0; }
+.step.done .t { text-decoration: line-through; color: var(--muted); font-weight: 400; }
+.d { grid-column: 2; color: var(--muted); font-size: 0.85rem; min-width: 0; }
+.meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.new { font: 700 0.64rem var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); padding: 0 5px; border-radius: 4px; }
+.notebtn { font: 500 0.72rem var(--sans); color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline dotted; }
+.notetext { grid-column: 2; font-size: 0.84rem; background: var(--accent-soft); padding: 5px 9px; border-radius: 7px; white-space: pre-wrap; }
+.note { grid-column: 2; } .note textarea { width: 100%; min-height: 50px; font: 0.86rem var(--sans); padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg); resize: vertical; }
+.add { margin-top: 30px; padding: 14px; border-radius: var(--r); background: var(--panel); border: 1px dashed var(--line); display: grid; gap: 8px; }
+.add h2 { font-size: 1rem; }
+.add .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.add input, .add select { font: inherit; font-size: 0.92rem; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); min-width: 0; }
+.add input { flex: 1 1 240px; } .add select { max-width: 100%; }
+.btn { font: 500 0.82rem var(--sans); padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.msg { font-size: 0.78rem; color: var(--muted); min-height: 1em; }
+@media (max-width: 640px) { .stage { grid-template-columns: 2rem 1fr; } }
+@media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title">Project board</h1>
+    <p class="lede">Every step from the project's TODO.md, in its order. Tick what's done, add what's missing, leave a note — Claude carries it back into the TODO.</p>
+  </header>
+  <div class="top">
+    <div class="sum" id="sum"></div>
+    <div class="meter" aria-hidden="true"><span id="meter" style="width:0"></span></div>
+    <button class="chip" type="button" id="showall" aria-pressed="false">Show finished stages</button>
+  </div>
+  <div id="notice" class="notice" hidden></div>
+  <div id="board"><p class="empty">The board is loading…</p></div>
+  <form class="add" id="add" hidden>
+    <h2>Add a step</h2>
+    <div class="row">
+      <select id="add-stage" aria-label="Stage"></select>
+      <input id="add-title" placeholder="What needs doing, in a few words" aria-label="Step" required>
+      <button class="btn" type="submit">Add it</button>
+    </div>
+    <div class="msg" id="add-msg"></div>
+  </form>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let db = null, canWrite = true, meta = null, stages = new Map(), showAll = false;
+const open = new Set(), busy = new Set(), editing = new Set();
+try { showAll = localStorage.getItem("board-showall") === "1"; } catch {}
+$("showall").setAttribute("aria-pressed", showAll);
+$("showall").onclick = () => { showAll = !showAll; $("showall").setAttribute("aria-pressed", showAll);
+  try { localStorage.setItem("board-showall", showAll ? "1" : "0"); } catch {} render(); };
+
+function show(words) { const n = $("notice"); n.textContent = words; n.hidden = false; }
+function ordered() { return [...stages.values()].sort((a, b) => (a.order ?? 999) - (b.order ?? 999)); }
+
+function render() {
+  if (meta && meta.title) { $("title").textContent = meta.title; document.title = meta.title; }
+  const list = ordered();
+  const all = list.flatMap(s => s.items || []);
+  const done = all.filter(i => i.done).length;
+  const now = list.find(s => (s.items || []).some(i => !i.done));
+  $("sum").innerHTML = "<span>Done <b></b> of <b></b></span><span>Now: <b></b></span>";
+  const b = $("sum").querySelectorAll("b");
+  b[0].textContent = done; b[1].textContent = all.length; b[2].textContent = now ? now.name : "everything done";
+  $("meter").style.width = (all.length ? 100 * done / all.length : 0) + "%";
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest(".note")) return;  // never wipe a note mid-typing
+  const box = $("board"); box.innerHTML = "";
+  if (!list.length) { box.innerHTML = `<p class="empty">${db ? "No steps yet. Claude fills this board from the project's TODO.md." : "This board lives in the page's database, which this view can't open."}</p>`; return; }
+  const ol = document.createElement("ol"); ol.className = "stages";
+  list.forEach((s, i) => {
+    const items = s.items || [], d = items.filter(x => x.done).length, complete = items.length && d === items.length;
+    if (complete && !showAll && !open.has(s.id)) {
+      const li = document.createElement("li"); li.className = "stage complete";
+      li.innerHTML = `<div class="no"></div><div class="body"><h2><span></span><button class="fold" type="button">show its ${items.length} steps</button></h2></div>`;
+      li.querySelector(".no").textContent = "✓"; li.querySelector("h2 span").textContent = s.name;
+      li.querySelector(".fold").onclick = () => { open.add(s.id); render(); };
+      ol.appendChild(li); return;
+    }
+    const li = document.createElement("li"); li.className = "stage" + (complete ? " complete" : "");
+    li.innerHTML = `<div class="no"></div><div class="body"><h2><span></span></h2>
+      <div class="prog"><div class="bar"><span></span></div><span class="n"></span></div><ul class="steps"></ul></div>`;
+    li.querySelector(".no").textContent = String(i + 1).padStart(2, "0");
+    li.querySelector("h2 span").textContent = s.name;
+    if (complete) { const f = document.createElement("button"); f.className = "fold"; f.type = "button"; f.textContent = "fold";
+      f.onclick = () => { open.delete(s.id); render(); }; li.querySelector("h2").appendChild(f); }
+    li.querySelector(".prog .bar span").style.width = (items.length ? 100 * d / items.length : 0) + "%";
+    li.querySelector(".prog .n").textContent = `${d} of ${items.length} done`;
+    const ul = li.querySelector("ul");
+    items.forEach((it, k) => ul.appendChild(stepRow(s, it, k)));
+    ol.appendChild(li);
+  });
+  box.appendChild(ol);
+  const sel = $("add-stage"), keep = sel.value; sel.innerHTML = "";
+  for (const s of list) { const o = document.createElement("option"); o.value = s.id; o.textContent = s.name; sel.appendChild(o); }
+  if (keep) sel.value = keep; else if (now) sel.value = now.id;
+}
+
+function stepRow(s, it, k) {
+  const li = document.createElement("li"); li.className = "step" + (it.done ? " done" : ""); li.dataset.depth = it.depth || 0;
+  li.innerHTML = `<button class="tick" type="button">✓</button><span class="t"></span>`;
+  const tick = li.querySelector(".tick");
+  tick.setAttribute("aria-pressed", it.done ? "true" : "false");
+  tick.setAttribute("aria-label", (it.done ? "Not done: " : "Done: ") + it.title);
+  tick.disabled = !(db && canWrite);
+  tick.onclick = () => change(s.id, k, { done: !it.done, doneAt: it.done ? null : new Date().toISOString() });
+  li.querySelector(".t").textContent = it.title;
+  if (it.detail) { const d = document.createElement("div"); d.className = "d"; d.textContent = it.detail; li.appendChild(d); }
+  const meta = document.createElement("div"); meta.className = "meta";
+  if (it.added) { const n = document.createElement("span"); n.className = "new"; n.textContent = "Added here"; meta.appendChild(n); }
+  if (db && canWrite) { const nb = document.createElement("button"); nb.className = "notebtn"; nb.type = "button";
+    nb.textContent = it.note ? "Edit the note" : "Add a note"; nb.onclick = () => editNote(li, s.id, k, it); meta.appendChild(nb); }
+  li.appendChild(meta);
+  if (it.note) { const n = document.createElement("div"); n.className = "notetext"; n.textContent = it.note; li.appendChild(n); }
+  return li;
+}
+
+function editNote(li, sid, k, it) {
+  li.querySelector(".notetext")?.remove();
+  const box = document.createElement("div"); box.className = "note";
+  const ta = document.createElement("textarea"); ta.value = it.note || ""; ta.setAttribute("aria-label", "Note");
+  box.appendChild(ta); li.appendChild(box); ta.focus();
+  ta.addEventListener("blur", async () => {
+    const note = ta.value.trim(); box.remove();
+    if (note !== (it.note || "")) await change(sid, k, { note }); else render();
+  });
+}
+
+async function change(sid, k, patch) {          // one write at a time per stage; the whole step list goes back
+  if (!db || !canWrite || busy.has(sid)) return;
+  const s = stages.get(sid); if (!s) return;
+  const items = (s.items || []).map((x, i) => i === k ? { ...x, ...patch } : { ...x });
+  busy.add(sid);
+  try { await db.collection("stages").doc(sid).update({ items }); }
+  catch (e) { failed(e); }
+  finally { busy.delete(sid); }
+}
+
+$("add").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const sid = $("add-stage").value, title = $("add-title").value.trim(), s = stages.get(sid);
+  if (!title || !s || !db) return;
+  $("add-msg").textContent = "Adding…";
+  const items = [...(s.items || []).map(x => ({ ...x })), { id: "b" + Date.now().toString(36), title, detail: "", done: false, depth: 0, added: true }];
+  try { await db.collection("stages").doc(sid).update({ items }); $("add-title").value = ""; $("add-msg").textContent = "Added at the end of its stage."; }
+  catch (err) { failed(err); $("add-msg").textContent = ""; }
+});
+
+function failed(e) {
+  const code = e && e.code;
+  if (code === "invalid_argument" || code === "revoked") { canWrite = false; $("add").hidden = true; render(); show("This view can read the board but can't change it."); }
+  else show("That change didn't save. Try it again in a moment.");
+}
+
+(async () => {
+  try { db = window.claude ? await window.claude.use("db") : null; } catch { db = null; }
+  if (!db) { render(); show("This view can't open the board's database. Open it on claude.ai while signed in."); return; }
+  try { const user = await window.claude.use("user"); if (user && (await user.can("data.write")) === false) canWrite = false; } catch {}
+  $("add").hidden = !canWrite;
+  db.doc("meta/config").onSnapshot(snap => { meta = snap.exists ? snap.data() : null; render(); }, () => {});
+  db.collection("stages").onSnapshot(snap => {
+    stages = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }])); render();
+  }, () => show("The board stopped updating live. Reload the page."));
+})();
+</script>

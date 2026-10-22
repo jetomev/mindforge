@@ -90,7 +90,7 @@ One command per turn - intro, command, expected result, then stop.
 | `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
 | `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. First hit: the reply goes back for a rewrite and you see the alert; second pass: alert only. `--check` reads a file instead |
 | `mindforge chime [--test]` | **a sound when the assistant is done and waiting** (0.1.7), so you hear it from the next room. From the Stop and Notification hooks; silent when there is no player or sound file |
-| `mindforge active [--show\|--clear\|<path>]` | **the active project's banner** (0.1.8): a SessionStart hook that prints `scripts/status.sh` of the project in play. `wrap` moves the pointer to the project the focus names, so nobody edits it by hand; when the pointer and the last wrapped session disagree, the banner says so instead of stating the stale one as fact. Silent with no pointer |
+| `mindforge active [--show\|--clear\|<path>]` | **the active project's banner** (0.1.8): a SessionStart hook that prints `scripts/status.sh` of the project in play — or, for a project with a **board** (a `.board` file), says to open the board beside the chat first and summarises its TODO.md (`boards/board.py`, unreleased). `wrap` moves the pointer to the project the focus names, so nobody edits it by hand; when the pointer and the last wrapped session disagree, the banner says so instead of stating the stale one as fact. Silent with no pointer |
 
 Two files hold your rules, and the difference is the whole point:
 

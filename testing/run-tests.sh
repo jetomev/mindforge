@@ -914,6 +914,27 @@ if begin "active project"; then
   end
 fi
 
+# Boards (the maintainer, 2026-10-22: "all projects need their own project page, and be opened as soon as
+# we call a project"). A `.board` file names the page; calling the project says to open it first, and a
+# project with a board but no status script gets the board's summary from its TODO.md.
+if begin "boards"; then
+  make_repo boarded; make_repo both; status_script both
+  printf 'https://claude.ai/artifact/BOARDTEST\n' > "$SB/projects/boarded/.board"
+  printf '# Boarded — the list\n\n## Phase 1 · Build\n- [x] the first step\n- [ ] the second step\n\n## Phase 2 · Ship\n- [ ] the release\n' > "$SB/projects/boarded/TODO.md"
+  printf 'https://claude.ai/artifact/BOTHTEST\n' > "$SB/projects/both/.board"
+  out=$(mf active "$SB/projects/boarded" 2>&1); rc=$?
+  check "a project with a board and no status script is accepted" [ "$rc" -eq 0 ]
+  check "calling it says to open the board first"   grep -q 'BOARD — open it beside the chat FIRST (Artifact open): https://claude.ai/artifact/BOARDTEST' <<<"$out"
+  check "and shows the board's stages from TODO.md" cond 'grep -q '\''Phase 1 · Build *1/2'\'' <<<"$out" && grep -q '\''NEXT — Phase 1 · Build'\'' <<<"$out"'
+  out=$(mf active "$SB/projects/both" 2>&1)
+  check "a status script still runs, the board line above it" cond 'grep -q '\''BOARD .*BOTHTEST'\'' <<<"$out" && grep -q '\''status of both'\'' <<<"$out"'
+  rm "$SB/projects/boarded/.board"
+  out=$(mf active "$SB/projects/boarded" 2>/dev/null); rc=$?
+  check "without the board file it is refused again (exit 2)" [ "$rc" -eq 2 ]
+  mf active --clear >/dev/null
+  end
+fi
+
 if begin "chime"; then
   : > "$SB/bin/paplay"; chmod +x "$SB/bin/paplay"     # a player that does nothing
   printf 'x' > "$SB/ding.oga"

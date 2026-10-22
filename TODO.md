@@ -8,6 +8,11 @@ mindForge is the start-of-session briefing and end-of-session record for working
 
 ---
 
+## 2026-10-22 · Boards (unreleased)
+- [x] **Every project's page beside the chat** (the maintainer: *"for all projects we have, the same page… opened as soon as we call a project"*): `boards/board.py` (build · status · pull) + `boards/board.html`; `mindforge active` and the one-project brief open the board first; 24 project boards published and filled from their TODO.md; checks 293 → 298 (the new ones seen failing on the old build)
+- [x] CLAUDE.md for mindForge itself (it had none)
+- [ ] **Ship it in the next version** (0.1.11 or 0.2.0): `boards/` in the AUR recipe, the README's own Boards section, `board.py pull` used at every wrap so ticks made on a page reach TODO.md
+
 ## 2026-10-19 · v0.1.9 + v0.1.10
 - [x] **The issue review** (the maintainer asked): 25 open; #65 #38 #64 were missing from this list.
 - [x] **v0.1.9** tagged `3a7dca3`, Release with signed files; five issues closed (#17 #18 #19 #20 #31), four commented and left open for the laptop (#15 #21 #38 #65); #66 opened (the recipe's license).

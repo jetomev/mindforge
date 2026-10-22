@@ -1695,6 +1695,26 @@ active_path() {   # the pointer, expanded; status 1 when there is none
   head -1 "$ACTIVE" | tr -d '\r' | sed "s|^~|$HOME|"
 }
 
+# ── boards · every project's page beside the chat (the maintainer, 2026-10-22) ─
+# A project with a `.board` file (one line: its page's address) has a board: boards/board.py makes it
+# from the project's TODO.md. Calling the project says "open the board beside the chat FIRST", and a
+# project with a board but no scripts/status.sh gets the board's own summary instead.
+BOARDS_PY="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd)/boards/board.py"
+has_status() {   # a project mindForge can point at: its own status script, or a board + TODO.md
+  [ -x "$1/scripts/status.sh" ] || { [ -s "$1/.board" ] && [ -r "$1/TODO.md" ]; }
+}
+project_status() {   # the summary; status 1 when the project has neither
+  local d="$1"
+  if [ -x "$d/scripts/status.sh" ]; then
+    [ -s "$d/.board" ] && printf 'BOARD — open it beside the chat FIRST (Artifact open): %s\n' "$(head -1 "$d/.board" | tr -d '\r')"
+    ( cd "$d" && bash scripts/status.sh )
+  elif [ -s "$d/.board" ] && [ -r "$BOARDS_PY" ] && command -v python3 >/dev/null 2>&1; then
+    python3 "$BOARDS_PY" status "$d"
+  else
+    return 1
+  fi
+}
+
 # The project a focus line names: every repo under the roots and every
 # project the queue names is a candidate if it has scripts/status.sh; the
 # longest name found in the text as a whole word, case-insensitive, wins.
@@ -1702,7 +1722,7 @@ active_path() {   # the pointer, expanded; status 1 when there is none
 focus_project() {
   local focus="$1" best="" best_name="" cand name proj d
   while IFS= read -r cand; do
-    [ -n "$cand" ] && [ -x "$cand/scripts/status.sh" ] || continue
+    [ -n "$cand" ] && has_status "$cand" || continue
     name=$(basename "$cand")
     grep -qiwF -- "$name" <<<"$focus" || continue
     [ ${#name} -gt ${#best_name} ] && { best="$cand"; best_name="$name"; }
@@ -1725,7 +1745,7 @@ active() {
     "")      ;;
     -*)      bad_option active "$arg" ;;
     *)       p=$(canon_dir "${arg/#\~/$HOME}") && [ -n "$p" ] || { echo "mindforge active: '$arg' is not a folder" >&2; return 2; }
-             [ -x "$p/scripts/status.sh" ] || { echo "mindforge active: $p has no scripts/status.sh" >&2; return 2; }
+             has_status "$p" || { echo "mindforge active: $p has no scripts/status.sh and no board (.board + TODO.md)" >&2; return 2; }
              mkdir -p "$STATE" && printf '%s\n' "$p" > "$ACTIVE" || { echo "mindforge active: could not write $ACTIVE" >&2; return 1; }
              printf 'active project: %s\n' "$p"
              # the maintainer, 2026-10-17 ("summarized project table, always, when I am calling a project.
@@ -1735,7 +1755,7 @@ active() {
   esac
   p=$(active_path) || return 0            # no pointer: no banner, by design
   [ -d "$p" ] || { echo "active-project points at '$p', which does not exist"; return 0; }
-  [ -x "$p/scripts/status.sh" ] || { echo "active project '$p' has no scripts/status.sh"; return 0; }
+  has_status "$p" || { echo "active project '$p' has no scripts/status.sh and no board"; return 0; }
   local L f w
   L=$(last_wrapped); f=$(cut -f4 <<<"$L")
   if [ -z "$chosen" ] && [ -n "$f" ] && w=$(focus_project "$f") && [ -n "$w" ] && [ "$(canon_dir "$w")" != "$(canon_dir "$p")" ]; then
@@ -1744,7 +1764,7 @@ active() {
   fi
   echo "ACTIVE PROJECT — render this to the person, they cannot see hook output."
   echo "Standing instruction: show this summary and list again after every step, and keep TODO.md current."
-  bash "$p/scripts/status.sh"
+  project_status "$p"
 }
 
 # ── scrub · scoped names where they do not belong (0.1.10, #23) ────────────
@@ -1917,8 +1937,8 @@ project_brief() {
   fi
   echo
   # the phase table and NEXT items: the project's own status script, else its TODO.md
-  if [ -x "$d/scripts/status.sh" ]; then
-    ( cd "$d" && bash scripts/status.sh ) 2>&1
+  if has_status "$d"; then
+    project_status "$d" 2>&1
   elif [ -r "$d/TODO.md" ]; then
     printf '%sTODO.md, open items%s\n' "$B" "$O"
     grep -nE '^[[:space:]]*- \[ \]' "$d/TODO.md" | head -12 | sed -E 's/^([0-9]+):[[:space:]]*- \[ \] /  \1  /' | cut -c1-160
