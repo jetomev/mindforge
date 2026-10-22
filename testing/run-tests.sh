@@ -928,6 +928,15 @@ if begin "boards"; then
   check "and shows the board's stages from TODO.md" cond 'grep -q '\''Phase 1 · Build *1/2'\'' <<<"$out" && grep -q '\''NEXT — Phase 1 · Build'\'' <<<"$out"'
   out=$(mf active "$SB/projects/both" 2>&1)
   check "a status script still runs, the board line above it" cond 'grep -q '\''BOARD .*BOTHTEST'\'' <<<"$out" && grep -q '\''status of both'\'' <<<"$out"'
+  # a badge file labels the steps it names, and only those (2026-10-22: KognogOS's 1.0 badge on its projects' boards)
+  id=$(python3 -c 'import sys,importlib.util as u; s=u.spec_from_file_location("b",sys.argv[1]); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.step_id("Phase 2 · Ship","the release"))' "$ROOT/boards/board.py")
+  printf '{"%s": "KognogOS 1.0 · stage 03"}' "$id" > "$SB/badges.json"
+  python3 "$ROOT/boards/board.py" build "$SB/projects/boarded" "$SB/bout" --badges "$SB/badges.json" >/dev/null
+  check "a badge lands on the step it names, and on no other" cond 'grep -q '\''"badge": "KognogOS 1.0 · stage 03"'\'' "$SB/bout/stages/s01.json" && ! grep -q badge "$SB/bout/stages/s00.json"'
+  # steps written above a TODO's first heading are steps too (2026-10-22: bitlaForge's opening block never reached its board)
+  printf '# Boarded — the list\n\n- [ ] the step above every heading\n\n## Phase 1 · Build\n- [x] the first step\n' > "$SB/projects/boarded/TODO.md"
+  out=$(mf active "$SB/projects/boarded" 2>&1)
+  check "steps above the first heading show, as the stage Now" cond 'grep -q '\''Now *0/1'\'' <<<"$out" && grep -q '\''NEXT — Now'\'' <<<"$out"'
   rm "$SB/projects/boarded/.board"
   out=$(mf active "$SB/projects/boarded" 2>/dev/null); rc=$?
   check "without the board file it is refused again (exit 2)" [ "$rc" -eq 2 ]

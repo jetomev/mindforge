@@ -10,7 +10,9 @@ each "## section" with checkboxes becomes a stage, each "- [ ]" / "- [x]" a step
     board.py build  <project-dir> <out-dir>    the database documents for <project-dir>'s TODO.md, as files
                                                (out-dir/meta/config.json, out-dir/stages/sNN.json) to send with
                                                ArtifactData batch; every step keeps the note/done mark the
-                                               board gave it when --from <export-dir> is passed
+                                               board gave it when --from <export-dir> is passed; --badges <file>
+                                               ({step id: label}) puts a small label on those steps, e.g.
+                                               "KognogOS 1.0 · stage 03" from KognogOS's scripts/board-links.py
     board.py status <project-dir>              the banner `mindforge active` prints: the BOARD line first, then
                                                each stage's progress and what's next — read live from TODO.md
     board.py pull   <project-dir> <export-dir> ticks and new steps made on the board, written back into TODO.md
@@ -65,6 +67,9 @@ def parse(todo: Path) -> tuple[str, list[dict]]:
                 stages.append(cur)
             continue
         m = CHECK.match(line)
+        if m and cur is None:          # steps above the first heading are steps too, in a stage of their own
+            cur = {"name": "Now", "items": [], "line": n}
+            stages.append(cur)
         if m and cur is not None:
             depth = min(len(m.group(1).expandtabs(2)) // 2, 3)
             t, d = split_title(m.group(3))
@@ -73,8 +78,9 @@ def parse(todo: Path) -> tuple[str, list[dict]]:
     return title, [s for s in stages if s["items"]]
 
 
-def build(project: Path, out: Path, export: Path | None) -> int:
+def build(project: Path, out: Path, export: Path | None, badges: Path | None = None) -> int:
     title, stages = parse(project / "TODO.md")
+    labels = json.loads(badges.read_text()) if badges and badges.exists() else {}
     kept = {}
     if export and (export / "stages").is_dir():          # notes and board-only marks survive a rebuild
         for f in (export / "stages").glob("*.json"):
@@ -93,6 +99,8 @@ def build(project: Path, out: Path, export: Path | None) -> int:
             for k in ("note", "doneAt"):
                 if old.get(k):
                     item[k] = old[k]
+            if labels.get(it["id"]):
+                item["badge"] = labels[it["id"]]
             items.append(item)
         (out / f"stages/s{i:02d}.json").write_text(json.dumps({"order": i, "name": s["name"], "items": items},
                                                               ensure_ascii=False))
@@ -160,7 +168,8 @@ def main(argv: list[str]) -> int:
         return status(Path(argv[1]).expanduser())
     if len(argv) >= 3 and argv[0] == "build":
         exp = Path(argv[argv.index("--from") + 1]) if "--from" in argv else None
-        return build(Path(argv[1]).expanduser(), Path(argv[2]), exp)
+        bad = Path(argv[argv.index("--badges") + 1]) if "--badges" in argv else None
+        return build(Path(argv[1]).expanduser(), Path(argv[2]), exp, bad)
     if len(argv) >= 3 and argv[0] == "pull":
         return pull(Path(argv[1]).expanduser(), Path(argv[2]))
     sys.exit(__doc__)

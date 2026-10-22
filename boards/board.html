@@ -54,6 +54,7 @@ ul.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .step.done .t { text-decoration: line-through; color: var(--muted); font-weight: 400; }
 .d { grid-column: 2; color: var(--muted); font-size: 0.85rem; min-width: 0; }
 .meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.badge { font: 600 0.66rem var(--mono); color: var(--accent); background: var(--accent-soft); padding: 0 6px; border-radius: 4px; white-space: nowrap; }
 .new { font: 700 0.64rem var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); padding: 0 5px; border-radius: 4px; }
 .notebtn { font: 500 0.72rem var(--sans); color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline dotted; }
 .notetext { grid-column: 2; font-size: 0.84rem; background: var(--accent-soft); padding: 5px 9px; border-radius: 7px; white-space: pre-wrap; }
@@ -162,6 +163,8 @@ function stepRow(s, it, k) {
   li.querySelector(".t").textContent = it.title;
   if (it.detail) { const d = document.createElement("div"); d.className = "d"; d.textContent = it.detail; li.appendChild(d); }
   const meta = document.createElement("div"); meta.className = "meta";
+  if (it.badge) { const g = document.createElement("span"); g.className = "badge"; g.textContent = it.badge;
+    g.title = "Another board is waiting on this step"; meta.appendChild(g); }
   if (it.added) { const n = document.createElement("span"); n.className = "new"; n.textContent = "Added here"; meta.appendChild(n); }
   if (db && canWrite) { const nb = document.createElement("button"); nb.className = "notebtn"; nb.type = "button";
     nb.textContent = it.note ? "Edit the note" : "Add a note"; nb.onclick = () => editNote(li, s.id, k, it); meta.appendChild(nb); }
