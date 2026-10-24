@@ -14,6 +14,8 @@ mindForge is the start-of-session briefing and end-of-session record for working
 ## 2026-10-22 · Boards (unreleased)
 - [x] **Every project's page beside the chat** (the maintainer: *"for all projects we have, the same page… opened as soon as we call a project"*): `boards/board.py` (build · status · pull) + `boards/board.html`; `mindforge active` and the one-project brief open the board first; 24 project boards published and filled from their TODO.md; checks 293 → 298 (the new ones seen failing on the old build)
 - [x] CLAUDE.md for mindForge itself (it had none)
+- [x] **Pending · Finished · All** on every board (`5750511`, 10-22: the maintainer asked after the KognogOS board had them): three buttons on top, the choice remembered per board
+- [x] **Badges from another board** (`de463cc`, 10-22): `board.py build --badges <file>` puts "KognogOS 1.0 · stage NN" on the steps the road waits on; steps written above a TODO's first heading go into a stage called "Now". 300 checks
 - [ ] **Ship it in the next version** (0.1.11 or 0.2.0): `boards/` in the AUR recipe, the README's own Boards section, `board.py pull` used at every wrap so ticks made on a page reach TODO.md
 
 ## 2026-10-19 · v0.1.9 + v0.1.10
