@@ -4,6 +4,7 @@ Newest first.
 
 ## Unreleased
 
+- 🗺 **A step's progress lines reach its board.** Lines indented under a TODO step that are not steps themselves (`  - built on Monday`, `    Progress: …`) now join that step's detail on the page. Progress had been written there on purpose, so the step's first words (its id, which links it to other boards) never change, and no board showed it. 2 checks, the first seen failing on the old code; 302 checks.
 - 🗺 **Boards: every project's page beside the chat.** The maintainer: *"all projects need their own project
   page, and be opened as soon as we call a project."* `boards/board.py build` turns a project's TODO.md into a
   page (one Artifact per project, `boards/board.html`: its sections as stages, its checkboxes as steps, Done

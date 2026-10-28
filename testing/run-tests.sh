@@ -937,6 +937,13 @@ if begin "boards"; then
   printf '# Boarded — the list\n\n- [ ] the step above every heading\n\n## Phase 1 · Build\n- [x] the first step\n' > "$SB/projects/boarded/TODO.md"
   out=$(mf active "$SB/projects/boarded" 2>&1)
   check "steps above the first heading show, as the stage Now" cond 'grep -q '\''Now *0/1'\'' <<<"$out" && grep -q '\''NEXT — Now'\'' <<<"$out"'
+  # the lines indented under a step are its progress, and the board shows them (2026-10-28: progress written on
+  # sub-lines, to keep a step's id, never reached any board); the step's id does not change with them
+  printf '# Boarded — the list\n\n## Phase 1 · Build\n- [ ] the first step\n  - built on Monday\n    Progress: tried on Tuesday\n- [ ] the second step\n' > "$SB/projects/boarded/TODO.md"
+  python3 "$ROOT/boards/board.py" build "$SB/projects/boarded" "$SB/bout2" >/dev/null
+  check "a step's indented lines reach the board as its detail, and only that step's" cond 'grep -q '\''built on Monday · Progress: tried on Tuesday'\'' "$SB/bout2/stages/s00.json" && [ "$(grep -o '\''tried on Tuesday'\'' "$SB/bout2/stages/s00.json" | wc -l)" -eq 1 ]'
+  id1=$(python3 -c 'import sys,importlib.util as u; s=u.spec_from_file_location("b",sys.argv[1]); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.step_id("Phase 1 · Build","the first step"))' "$ROOT/boards/board.py")
+  check "and the step keeps the id it had without them" grep -q "\"id\": \"$id1\"" "$SB/bout2/stages/s00.json"
   rm "$SB/projects/boarded/.board"
   out=$(mf active "$SB/projects/boarded" 2>/dev/null); rc=$?
   check "without the board file it is refused again (exit 2)" [ "$rc" -eq 2 ]

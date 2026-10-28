@@ -74,7 +74,16 @@ def parse(todo: Path) -> tuple[str, list[dict]]:
             depth = min(len(m.group(1).expandtabs(2)) // 2, 3)
             t, d = split_title(m.group(3))
             cur["items"].append({"id": step_id(cur["name"], m.group(3)), "title": t, "detail": d,
-                                 "done": m.group(2) in "xX", "depth": depth, "line": n})
+                                 "done": m.group(2) in "xX", "depth": depth, "line": n,
+                                 "indent": len(m.group(1).expandtabs(2))})
+            continue
+        # a line indented under a step, not a step itself, is that step's progress: it joins the step's detail
+        # (2026-10-28: progress went on sub-lines so a step's id holds, and no board ever showed it)
+        last = cur["items"][-1] if cur and cur["items"] else None
+        text = line.strip()
+        if last and text and len(line) - len(line.lstrip()) > last["indent"]:
+            text = re.sub(r"^[-*] ", "", text)
+            last["detail"] = f"{last['detail']} · {text}" if last["detail"] else text
     return title, [s for s in stages if s["items"]]
 
 
