@@ -4,6 +4,17 @@ Newest first.
 
 ## Unreleased
 
+- 🧠 **The brain, part 1 (0.1.11): agreements that are not missed.** From an audit of one night of missed agreements (`docs/AUDIT-2026-11-06.md`), each change checked line by line against the maintainer's own words before it was built, and every one of them dropped where it added something he never asked for.
+  - **Warnings escalate again.** The "N sessions -- fix it" escalation matched a finding's exact text, and the text carries a number that moves daily, so it never reached three: the same warnings repeated in yellow for five sessions. Findings are now counted by rule and subject. 4 checks, seen failing on the old build.
+  - **R7 by summary.** A memory note whose `description:` changed since the index was written is named on its own line; notes whose details changed under the same summary are still named, apart. Body edits no longer read as a summary change. 7 checks.
+  - **R9 counts lines.** The loader reads the first 200 lines or 25 KB of the index; R9 counted bytes only. Warned past 180 lines (`MINDFORGE_MEMORY_MAX_LINES`). 2 checks.
+  - **`mindforge heard`**: the person's style note before each reply, and the correction catcher (logged to `drift.log`; wrap lists them). Patterns calibrated on 12,000 lines of the maintainer's past messages (17 hits, ~10 real corrections). 16 checks.
+  - **`mindforge tone` notes instead of blocking.** No hook sees a reply before it is shown; blocking made the assistant write it twice. The slip goes to the next turn's note. 4 checks.
+  - **`mindforge memcheck`**: rules do not live in memory. A note that holds one names its home file and quotes the words that stand there (a missing or wrong home is refused); a new "still to happen" line carries its date. Replays of the night's two memory mistakes are refused. 12 checks.
+  - **The test harness** no longer trips its isolation check on the app add-ons' own files in the state folder.
+  - Called by the session-lights add-on, which every session already loads, so nothing new is installed by hand.
+  - 346 checks (was 302), all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0 (no linter in this repo; nothing new).
+
 - 🗺 **A step's progress lines reach its board.** Lines indented under a TODO step that are not steps themselves (`  - built on Monday`, `    Progress: …`) now join that step's detail on the page. Progress had been written there on purpose, so the step's first words (its id, which links it to other boards) never change, and no board showed it. 2 checks, the first seen failing on the old code; 302 checks.
 - 🗺 **Boards: every project's page beside the chat.** The maintainer: *"all projects need their own project
   page, and be opened as soon as we call a project."* `boards/board.py build` turns a project's TODO.md into a

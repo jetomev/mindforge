@@ -18,7 +18,7 @@ cannot be forgotten because it does not depend on remembering.
 > Windows laptop running Git Bash, has used it since mid-September and found
 > fourteen defects of its own; with 0.1.9 every one has a fix, and the
 > Windows-only ones wait for that laptop's next run to be proven there. Its
-> **automated test suite** has 293 checks. Every check it makes
+> **automated test suite** has 346 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 true. Still: one user, and we publish early and say so.
 
@@ -88,7 +88,9 @@ One command per turn - intro, command, expected result, then stop.
 | `mindforge hazards <project> [word...]` | **the hazards a project wrote down** (0.1.10): every line starting `HAZARD:` in its Markdown, filtered by what you are about to touch |
 | `mindforge hooks [--check \| --print]` | **are the hooks installed?** (0.1.9) — and `--print` gives the exact block to paste into `settings.json` for this platform (`--windows`, `--linux`). Hooks are installed by a person, by design: an assistant in auto mode is rightly not allowed to |
 | `mindforge log [--drop-last]` | the last few rows of the session log; `--drop-last` removes the last one and keeps a backup |
-| `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. First hit: the reply goes back for a rewrite and you see the alert; second pass: alert only. `--check` reads a file instead |
+| `mindforge tone [--check <file>]` | **the tie alert** (0.1.7): a Stop hook that reads the assistant's last reply and flags memo-speak — section headers, "Expected result:", status-report openers. Since 0.1.11 it notes the slip and the next reply is reminded, instead of making the assistant write the same reply twice (`MINDFORGE_TONE=block` keeps the old rewrite). `--check` reads a file instead |
+| `mindforge heard [--check "<text>"]` | **before each reply** (0.1.11): the person's own style note (`~/.config/mindforge/turn.local`) goes in front of every reply, plus any slip the last reply was caught with; and when the person's message reads as a correction, it is logged and the assistant is told to find the written agreement and correct the copy that misled it — never to write a new rule. Called when the person sends a message |
+| `mindforge memcheck` | **a memory write, checked before it lands** (0.1.11): a note that holds a rule must name the always-loaded file where the rule lives and quote its words as they stand there (rules do not live in memory); a new line saying something is still to happen must carry its date. Reads the write as JSON on stdin; exit 1 = refused, with the reason |
 | `mindforge chime [--test]` | **a sound when the assistant is done and waiting** (0.1.7), so you hear it from the next room. From the Stop and Notification hooks; silent when there is no player or sound file |
 | `mindforge active [--show\|--clear\|<path>]` | **the active project's banner** (0.1.8): a SessionStart hook that prints `scripts/status.sh` of the project in play — or, for a project with a **board** (a `.board` file), says to open the board beside the chat first and summarises its TODO.md (`boards/board.py`, unreleased). `wrap` moves the pointer to the project the focus names, so nobody edits it by hand; when the pointer and the last wrapped session disagree, the banner says so instead of stating the stale one as fact. Silent with no pointer |
 
@@ -138,9 +140,9 @@ every brief:
 | R4 | a memory file the index does not list |
 | R5 | the always-loaded tier over its 60-line budget |
 | R6 | the queue naming a project that is not on disk |
-| R7 | a memory index older than the files it describes |
+| R7 | a memory note whose summary changed since the index was written — or whose details changed under the same summary — named on two separate lines (0.1.11) |
 | R8 | the queue pointing at an issue that is already closed — checked against GitHub; and a row saying a version shipped that is behind the project's newest tag, `-` rows included |
-| R9 | a memory index too big to load in full, which fails with no message at all |
+| R9 | a memory index too big to load in full — past its byte budget, or past 180 lines (the loader reads only the first 200) — which fails with no message at all |
 | R10 | the session hooks missing or switched off — without them nothing above runs by itself |
 | R11 | a project with recent commits but no line in the queue — so the brief cannot show it at all |
 | R12 | a memory file that declares `rewritten_by: session` and was not rewritten during the last session — the one-slot handoff that said "read this first" while hours behind |
@@ -342,7 +344,7 @@ the version and changelog match, and the tests pass (#41).
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 293 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 346 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
 the release script, R11, the tie alert, the chime, the active project, one repo
 seen under two spellings of its path, the hooks command, the Windows memory
