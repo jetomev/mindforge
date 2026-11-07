@@ -1314,6 +1314,21 @@ wrap_checks() {
       fi
     done < <(handoff_files)
   fi
+  # 0.1.11 · the person's corrections this session (logged by `mindforge heard`)
+  # each want a cause logged with `mindforge drift`; fewer causes than
+  # corrections is open, so a correction cannot end a session unexplained.
+  if [ -n "$since" ] && [ -r "$STATE/drift.log" ]; then
+    local heardn causen
+    heardn=$(awk -F'\t' -v s="$since" '$1 >= s && $2 ~ /^heard \(/' "$STATE/drift.log" | grep -c .)
+    causen=$(awk -F'\t' -v s="$since" '$1 >= s && $2 !~ /^heard \(/' "$STATE/drift.log" | grep -c .)
+    if [ "$heardn" -gt 0 ]; then
+      if [ "$causen" -ge "$heardn" ]; then
+        c_ok "$heardn correction(s) from the person this session, each with a cause logged"
+      else
+        c_open "$heardn correction(s) from the person this session, $causen cause(s) logged -- for each, name what misled you and fix it there (mindforge drift \"...\")"
+      fi
+    fi
+  fi
   [ -r "$STATE/wip.md" ] && c_info "in-flight note cleared by this wrap: $(cut -f2 "$STATE/wip.md")"
   return 0
 }
@@ -1650,6 +1665,19 @@ try:
 except OSError:
     pass
 alert = f"tie alert: {tells}"
+# 0.1.11 · No hook can see a reply before it is shown; the Stop hook runs after
+# it is on screen. Blocking made the assistant write it AGAIN, so the person
+# read the same long reply twice (2026-11-06, minutes after an angry message).
+# Default now: note it, and `mindforge heard` (UserPromptSubmit) puts it in
+# front of the next reply. MINDFORGE_TONE=block brings the old rewrite back.
+if os.environ.get("MINDFORGE_TONE", "note") != "block":
+    try:
+        with open(os.path.join(state, "tone.pending"), "w", encoding="utf-8") as f:
+            f.write(tells + "\n")
+    except OSError:
+        pass
+    print(json.dumps({"systemMessage": alert + " (noted; the next reply is reminded)"}))
+    sys.exit(0)
 if hook.get("stop_hook_active"):
     print(json.dumps({"systemMessage": alert + " (second pass, letting it through)"}))
 else:
@@ -1670,6 +1698,115 @@ PY
   [ "$rc" -eq 3 ] && return 0     # blocked: no chime yet, the reply comes back
   chime                           # the reply went through: the person is waited on
   return 0
+}
+
+# ── heard · before each reply (0.1.11) ──────────────────────────────────────
+# A UserPromptSubmit hook: it runs when the person sends a message, BEFORE the
+# assistant writes a word -- the earliest moment a hook can act (no hook sees
+# a reply before it is shown). Two jobs:
+#  1. The turn note. The style rules sat at the top of a long context and lost
+#     to the app's own habits on long turns; the tone check could only catch
+#     the slip after the person had read it. A few lines from turn.local (or a
+#     plain default) go in front of every reply, plus the tells the last reply
+#     was caught with (tone.pending, written by `mindforge tone`).
+#  2. The correction catcher. When the person corrects the assistant ("I never
+#     asked", "we discussed this", "how many times"), the message is logged to
+#     drift.log and the assistant is told to find the agreement it broke and
+#     fix the SOURCE that misled it. drift.log had 5 entries in ten weeks while
+#     the misses kept coming: nothing wrote them down unless someone
+#     remembered to (2026-11-06).
+#   mindforge heard                (the hook; reads the hook's JSON on stdin)
+#   mindforge heard --check <text> say whether <text> reads as a correction
+#   ~/.config/mindforge/turn.local   the turn note, one line each (optional)
+#   ~/.config/mindforge/heard.local  extra correction patterns, one regex per line
+heard() {
+  local py
+  py=$(find_python) || exit 0   # never stand between the person and the reply
+  local mode="${1:-}" text="${2:-}" code
+  code=$(cat <<'PY'
+import json, os, re, sys, datetime
+mode, text, state, cfg, sid = sys.argv[1:6]
+PATTERNS = [
+    r"\bi never asked\b", r"\bnever asked for\b",
+    r"\bwe (already )?(discussed|talked about|agreed on|decided) (this|that)\b",
+    r"\bi (already )?told you\b", r"\bhow many times\b",
+    r"\bwhy (do |are )?you keep\b", r"\byou keep (doing|changing|missing|forgetting|asking|ignoring)\b",
+    r"\bstop (doing|using|with)\b", r"\b(infuriating|irritating|frustrat\w*|furious)\b",
+    r"\bnot what i (asked|said|wanted)\b", r"\byou (forgot|missed|ignored)\b",
+    r"\bnot following our\b", r"\bwe (don.t|do not) work (like|that way)\b", r"\bonce again\b",
+]
+local = os.path.join(cfg, "heard.local")
+if os.path.isfile(local):
+    for line in open(local, encoding="utf-8"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            PATTERNS.append(line)
+
+def correction(t):
+    for p in PATTERNS:
+        try:
+            m = re.search(p, t, flags=re.I)
+        except re.error:
+            continue
+        if m:
+            return m.group(0)
+    return None
+
+if mode == "--check":
+    hit = correction(text)
+    if hit:
+        print(hit)
+    sys.exit(0 if hit else 1)
+
+try:
+    hook = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+prompt = hook.get("prompt") or ""
+# what the app wraps around a message is not the person speaking
+prompt = re.sub(r"<system-reminder>.*?</system-reminder>", "", prompt, flags=re.S).strip()
+parts = []
+
+note = []
+tf = os.path.join(cfg, "turn.local")
+if os.path.isfile(tf):
+    note = [l.rstrip("\n") for l in open(tf, encoding="utf-8") if l.strip() and not l.startswith("#")]
+if not note:
+    note = ["Write this reply the way the person talks: sentences, no section headers, "
+            "no bold line used as a heading, no form labels."]
+parts.append("mindforge turn note: " + " ".join(note))
+
+pend = os.path.join(state, "tone.pending")
+if os.path.isfile(pend):
+    try:
+        tells = open(pend, encoding="utf-8").read().strip()
+        os.remove(pend)
+        if tells:
+            parts.append("Your last reply was caught with: " + tells + ". Do not repeat it.")
+    except OSError:
+        pass
+
+hit = correction(prompt) if prompt and not prompt.startswith("<") else None
+if hit:
+    excerpt = " ".join(prompt.split())[:200]
+    try:
+        with open(os.path.join(state, "drift.log"), "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M}\theard ({sid or 'no session'}): {excerpt}\n")
+    except OSError:
+        pass
+    parts.append(
+        f"mindforge: the person's message reads as a correction (\"{hit}\"). Before you reply: "
+        "find the agreement it breaks and quote it (L0, an L1 rules file, a project CLAUDE.md, "
+        "or a memory note carrying the person's own words); find the SOURCE that misled you "
+        "(a memory note, a tool's description, a handoff, an add-on) and fix that source, not "
+        "only this reply; then log the cause with: mindforge drift \"<what slipped and why>\". "
+        "If it is not a correction after all, carry on.")
+
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                         "additionalContext": "\n".join(parts)}}))
+PY
+)
+  $py -c "$code" "$mode" "$text" "$STATE" "$HOME/.config/mindforge" "${SID:-}"
 }
 
 # ── chime · a sound when the assistant is done and waiting (0.1.7) ───────────
@@ -2119,6 +2256,8 @@ usage:
   mindforge log [--drop-last]            recent rows / remove the last (backup kept)
   mindforge rot                          the silent-failure checks
   mindforge tone [--check <file>]        the tie alert (a Stop hook; --check reads a file)
+  mindforge heard [--check "<text>"]     before each reply: the turn note + the correction catcher
+                                         (a UserPromptSubmit hook; --check tests one message)
   mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook; <path> switches and shows it);
                                          wrap moves it to the project the focus names
   mindforge chime [--test]               a sound when the assistant is done and waiting
@@ -2159,6 +2298,7 @@ case "${1:-brief}" in
                  [ -n "${MF_TIMINGS:-}" ] && printf 'timing\t%-9s %6d ms\n' "total" $(( $(now_ms) - t_all )) >&2
                  true ;;
   tone)          shift; tone "$@" ;;
+  heard)         shift; heard "$@" ;;
   chime)         shift; chime "$@" ;;
   active)        shift; active "$@" ;;
   hooks)         shift; hooks_cmd "$@" ;;

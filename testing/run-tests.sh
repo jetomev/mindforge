@@ -66,6 +66,7 @@ mf() {
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="${SB_PROJECTS:-$SB/projects}" \
     MINDFORGE_MEMORY="${SB_MEM-$SB/mem}" CLAUDE_CODE_SESSION_ID="$SID" \
     SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
+    ${MINDFORGE_TONE:+MINDFORGE_TONE="$MINDFORGE_TONE"} \
     ${COLUMNS:+COLUMNS="$COLUMNS"} \
     MINDFORGE_CHIME="${MINDFORGE_CHIME:-/nonexistent-chime}" MINDFORGE_CHIME_PLAYER="${MINDFORGE_CHIME_PLAYER:-}" \
     bash "$MF" "$@"
@@ -873,6 +874,7 @@ if begin "tone --check"; then
 fi
 
 if begin "tone as the Stop hook"; then
+  export MINDFORGE_TONE=block   # the 0.1.7 rewrite, kept behind a switch since 0.1.11
   fake_transcript "$SB/t.jsonl" "Here's where it all stands. **Staged and verified**"
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
   check "first pass blocks the reply"            grep -q '"decision": *"block"' <<<"$out"
@@ -895,6 +897,49 @@ if begin "tone as the Stop hook"; then
   fake_transcript "$SB/l.jsonl" "hell yeah it worked"
   out=$(hook_json "$SB/l.jsonl" | mf tone)
   check "a local pattern is honoured"            grep -q 'a local pattern' <<<"$out"
+  unset MINDFORGE_TONE
+  end
+fi
+
+# 0.1.11 · the default no longer forces a second reply: it notes the tells for
+# `heard` to put in front of the next one.
+if begin "tone notes instead of blocking"; then
+  fake_transcript "$SB/t.jsonl" "Here's where it all stands. **Staged and verified**"
+  out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
+  check "no block by default"                    bash -c '! grep -q block <<<"$1"' _ "$out"
+  check "the person still sees the alert"        grep -q '"systemMessage": *"tie alert.*noted' <<<"$out"
+  check "the tells wait for the next turn"       grep -q 'status-report opener' "$SB/state/tone.pending"
+  check "still logged"                           grep -q 'status-report opener' "$SB/state/tone.log"
+  end
+fi
+
+# 0.1.11 · heard: the turn note and the correction catcher (UserPromptSubmit).
+prompt_json() { "$PY" -c 'import json,sys; print(json.dumps({"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":sys.argv[1]}))' "$1"; }
+if begin "heard: before each reply"; then
+  out=$(prompt_json "ok, next one please" | mf heard); rc=$?
+  check "a plain message: the turn note only"    cond 'grep -q "turn note" <<<"$out" && ! grep -q correction <<<"$out"'
+  check "it is UserPromptSubmit context"         grep -q '"hookEventName": *"UserPromptSubmit"' <<<"$out"
+  check "exit 0"                                 [ "$rc" -eq 0 ]
+  check "nothing logged for a plain message"     [ ! -s "$SB/state/drift.log" ]
+  out=$(prompt_json "these cards are horrible. I never asked for them. why you keep changing the way we work?" | mf heard)
+  check "a correction is named"                  grep -q 'reads as a correction' <<<"$out"
+  check "and told to fix the source"             grep -q 'fix that source' <<<"$out"
+  check "and logged to drift.log"                grep -q 'heard (.*I never asked' "$SB/state/drift.log"
+  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending"
+  out=$(prompt_json "go on" | mf heard)
+  check "last reply's tells come forward"        grep -q 'last reply was caught with: a bold line' <<<"$out"
+  check "and are used once"                      [ ! -e "$SB/state/tone.pending" ]
+  mkdir -p "$SB/home/.config/mindforge"; printf 'Steps he does: intro, numbered steps, what he sees.\n' > "$SB/home/.config/mindforge/turn.local"
+  out=$(prompt_json "go on" | mf heard)
+  check "turn.local replaces the default note"   grep -q 'Steps he does' <<<"$out"
+  out=$(prompt_json "<system-reminder>I never asked</system-reminder>go on" | mf heard)
+  check "app wrapping is not the person"         bash -c '! grep -q correction <<<"$1"' _ "$out"
+  mf heard --check "how many times do I have to say this" >/dev/null; rc=$?
+  check "--check: a correction exits 0"          [ "$rc" -eq 0 ]
+  mf heard --check "try the next build" >/dev/null; rc=$?
+  check "--check: plain text exits 1"            [ "$rc" -eq 1 ]
+  out=$(printf 'not json' | mf heard); rc=$?
+  check "bad input: silence, exit 0"             cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   end
 fi
 
@@ -903,6 +948,7 @@ fi
 # fails when run. Staged here with a stub that does exactly that, in front of
 # a `python` that works; then with nothing that works at all.
 if begin "tone finds a python that runs"; then
+  export MINDFORGE_TONE=block
   REAL_PY=$(command -v "$PY")
   printf '#!/usr/bin/env bash\necho "Python was not found; run without arguments to install from the Microsoft Store" >&2\nexit 9009\n' > "$SB/bin/python3"
   printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$REAL_PY" > "$SB/bin/python"
@@ -921,6 +967,7 @@ if begin "tone finds a python that runs"; then
   check "no python that runs: --check is silent, exit 0" cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
   check "no python that runs: the hook never blocks"    cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
+  unset MINDFORGE_TONE
   end
 fi
 
@@ -1131,6 +1178,7 @@ fi
 # #65 (W-14, item 2) · A transcript path in Git Bash's spelling reaches a Windows
 # python that cannot open it. Staged with a cygpath stub that knows the way.
 if begin "tone: a Git Bash transcript path (#65)"; then
+  export MINDFORGE_TONE=block
   fake_transcript "$SB/t.jsonl" "Here's where it all stands."
   printf '#!/usr/bin/env bash\n[ "$1" = -m ] && [ "$2" = /msys/t.jsonl ] && { echo "%s/t.jsonl"; exit 0; }\nexit 1\n' "$SB" > "$SB/bin/cygpath"
   chmod +x "$SB/bin/cygpath"
@@ -1139,6 +1187,7 @@ if begin "tone: a Git Bash transcript path (#65)"; then
   rm "$SB/bin/cygpath"
   out=$(hook_json "/msys/t.jsonl" | mf tone); rc=$?
   check "setup: without cygpath the same path is silent" cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
+  unset MINDFORGE_TONE
   end
 fi
 
