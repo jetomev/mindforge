@@ -89,6 +89,11 @@ commit_unpushed() {
 
 # Fingerprint of a directory tree: every file's path and content hash.
 snap() { ( cd "$1" 2>/dev/null && find . -type f -exec md5sum {} + | sort ) ; }
+# The real state folder is shared: the app's add-ons (status-strip, session-lights)
+# write their own cards into it every minute, so a run of a few minutes always saw
+# it "change" and failed isolation for no fault of mindForge's (found 2026-11-07,
+# true since the add-ons arrived on 2026-10-29). Their folders are theirs, not ours.
+snap_real() { ( cd "$1" 2>/dev/null && find . -type f -not -path './status-strip/*' -not -path './session-lights/*' -exec md5sum {} + | sort ) ; }
 rows() { grep -vc '^#' "$SB/state/sessions.log"; }
 
 # ---------------------------------------------------------------- asserting --
@@ -162,7 +167,7 @@ FAIL=0; RAN=0; FAILED=()
 # Where the real state lives, read the same way mindforge reads it.
 REAL_STATE=$( [ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
               printf '%s' "${MINDFORGE_STATE:-$HOME/.claude/state}" )
-REAL_BEFORE=$(snap "$REAL_STATE")
+REAL_BEFORE=$(snap_real "$REAL_STATE")
 
 # =================================================================== checks ==
 
@@ -1365,7 +1370,7 @@ if begin "hazards (#25)"; then
 fi
 
 # ================================================================== verdict ==
-REAL_AFTER=$(snap "$REAL_STATE")
+REAL_AFTER=$(snap_real "$REAL_STATE")
 echo
 if [ "$REAL_BEFORE" != "$REAL_AFTER" ]; then
   echo "ISOLATION BROKEN: the real state at $REAL_STATE changed during the run" >&2
