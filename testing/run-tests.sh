@@ -447,6 +447,38 @@ if begin "rot: present and fine stays quiet"; then
   end
 fi
 
+# 0.1.11 · three strikes by key, not text: a finding whose number moves daily
+# ("15 unpushed", then 17, then 18) never counted as the same finding, so the
+# escalation never fired (R3 and R7 for five sessions, 2026-11-06).
+if begin "rot: escalates by key when the count moves"; then
+  make_repo alpha; commit_unpushed alpha; seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"; hooks_json
+  printf '2026-01-01\tR3\talpha has 3 unpushed commit(s)\n2026-01-02\tR3\talpha has 4 unpushed commit(s)\n' > "$SB/state/rot.log"
+  out=$(mf rot)
+  check "third day with a new count turns red"  grep -q 'R3.*alpha has 1 unpushed.*3 days running' <<<"$out"
+  check "the red line asks the person"          grep -q 'ask the person' <<<"$out"
+  printf '2026-01-01\tR3\tbeta has 3 unpushed commit(s)\n2026-01-02\tR3\tbeta has 4 unpushed commit(s)\n' > "$SB/state/rot.log"
+  out=$(mf rot)
+  check "another repo's history does not count" bash -c '! grep -q "days running" <<<"$1"' _ "$out"
+  printf '2026-01-01\tR7\tMEMORY.md older than the file(s) it indexes: a.md\n2026-01-02\tR7\tMEMORY.md older than the file(s) it indexes: b.md c.md\n' > "$SB/state/rot.log"
+  : > "$SB/mem/MEMORY.md"; touch -d '2 days ago' "$SB/mem/MEMORY.md"; printf -- '---\nname: d\n---\n' > "$SB/mem/d.md"
+  printf -- '- [d](d.md)\n' > "$SB/mem/MEMORY.md.tmp"; cat "$SB/mem/MEMORY.md.tmp" > "$SB/mem/MEMORY.md"; rm "$SB/mem/MEMORY.md.tmp"
+  touch -d '2 days ago' "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "a changing file list keeps one key"    grep -q 'R7.*3 days running' <<<"$out"
+  end
+fi
+
+# 0.1.11 · @local: a repo kept on this machine on purpose stops nagging, visibly.
+if begin "rot: @local quiets R3 for that repo only"; then
+  make_repo alpha; make_repo beta; commit_unpushed alpha; commit_unpushed beta
+  seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"; hooks_json
+  printf 'alpha\tthe task\t3\tno\t-\nbeta\tthe task\t3\tno\t-\n@local alpha -- pushes wait on the maintainer\n' > "$SB/state/queue.md"
+  out=$(mf rot)
+  check "alpha is quiet"                        bash -c '! grep -q "R3.*alpha" <<<"$1"' _ "$out"
+  check "beta still reported"                   grep -q 'R3.*beta has 1 unpushed' <<<"$out"
+  end
+fi
+
 # #24: the scrub guard proves its tool works, and a partial scan says partial.
 HOOK="${MINDFORGE_HOOK_UNDER_TEST:-$ROOT/.githooks/pre-commit}"
 hook_repo() {
@@ -506,6 +538,7 @@ if begin "session-start runs the rot check"; then
   check "inside the briefing tags"         bash -c 'sed -n "/^<session-briefing>/,/^<\/session-briefing>/p" <<<"$1" | grep -q "^rot check"' _ "$out"
   check "carries an R8 finding"            grep -q 'R8.*#7 is CLOSED' <<<"$out"
   check "the directive asks for findings"  grep -q 'Name every rot-check finding' <<<"$out"
+  check "the directive turns red into a question" grep -q 'days running.*ask the person\|ask the person in this first reply' <<<"$out"
   check "logs it to rot.log"               grep -q 'R8' "$SB/state/rot.log"
   end
 fi

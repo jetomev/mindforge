@@ -699,11 +699,24 @@ rot_checks() {
   # mid-session; the headline counts it, the rot check does not nag about it.)
   # #24 · "no upstream" used to read as "0 unpushed" -- silence, where the
   # truth was "could not count". A repo git cannot read is said out loud too.
+  # `@local name ... -- why` in the queue: kept on this machine on purpose (a
+  # repo whose pushes wait on the maintainer's yes, a private scratch repo).
+  # Visible in the file, like @quiet. Without it R3 repeated the same two
+  # repos for five sessions and nobody could tell "forgotten" from "on purpose".
+  local localonly=" "
+  if [ -r "$STATE/queue.md" ]; then
+    local qp
+    while IFS=$'\t' read -r qp _; do
+      case "$qp" in @local*) qp=${qp#@local}; localonly="$localonly${qp%% -- *} " ;; esac
+    done < <(queue_lines)
+  fi
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     local n a; n=$(basename "$d")
     if ! repo_readable "$d"; then
       printf 'R3\t%s cannot be read as a git repo -- not checked\n' "$n"
+    elif case "$localonly" in *" $n "*) true ;; *) false ;; esac; then
+      :   # kept local on purpose (@local)
     elif ! repo_has_remote "$d"; then
       printf 'R3\t%s has no remote -- it exists on this machine only\n' "$n"
     elif a=$(repo_ahead "$d"); then
@@ -951,11 +964,23 @@ rot() {
   if [ -z "$found" ]; then
     printf '  %snothing rotting%s\n' "$G" "$O"; return 0
   fi
+  # Count the DISTINCT days each finding has appeared, by its key, not its text.
+  # The text carries numbers that move ("15 unpushed", then 17, then 18) and
+  # lists that change (R7's file names), so an exact-text count never reached
+  # three and the escalation never fired: R3 and R7 repeated for five sessions
+  # in plain yellow (found 2026-11-06). The key is the rule plus its subject,
+  # digits made neutral and a trailing ": list" dropped.
+  local days_by_key
+  days_by_key=$(awk -F'\t' '
+    function key(c, m) { sub(/: .*/, "", m); gsub(/[0-9]+/, "N", m); return c "\t" m }
+    { k = key($2, $3); if (!((k, $1) in seen)) { seen[k, $1] = 1; n[k]++ } }
+    END { for (k in n) print n[k] "\t" k }' "$log" 2>/dev/null)
   printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
-    # count DISTINCT days this exact finding has appeared
-    local seen; seen=$(grep -F "	$code	$msg" "$log" 2>/dev/null | cut -f1 | sort -u | wc -l)
+    local k seen; k=$(printf '%s\t%s' "$code" "$msg" | awk -F'\t' '{ m = $2; sub(/: .*/, "", m); gsub(/[0-9]+/, "N", m); print $1 "\t" m }')
+    seen=$(awk -F'\t' -v c="${k%%$'\t'*}" -v m="${k#*$'\t'}" '$2 == c && $3 == m { print $1; exit }' <<<"$days_by_key")
+    seen=${seen:-0}
     if [ "$seen" -ge 3 ]; then
-      printf '  %s%s  %s%s  %s(%s sessions -- fix it)%s\n' "$R" "$code" "$msg" "$O" "$R" "$seen" "$O"
+      printf '  %s%s  %s%s  %s(%s days running -- ask the person: fix it now, or mark it on purpose)%s\n' "$R" "$code" "$msg" "$O" "$R" "$seen" "$O"
     else
       printf '  %s%s%s  %s\n' "$Y" "$code" "$O" "$msg"
     fi
@@ -1065,7 +1090,9 @@ session_start() {
 INSTRUCTION: open your first reply with the briefing above, rendered for the
 user -- they cannot see hook output. It is already accurate; do not re-derive
 it with tool calls. Name every rot-check finding in it; "nothing rotting" is
-the only line you may summarise. Then answer what they actually asked.
+the only line you may summarise. A finding marked "days running" has been
+ignored too long: ask the person in this first reply whether to fix it now or
+mark it on purpose (@local or @quiet in the queue). Then answer what they asked.
 This is the short brief: the Projects table, Recommended first and State are NOT above.
 When the person asks for projects, status or "the brief", or types `mindforge brief`, run it
 and render the whole of it (the day before, the full Projects table, the recommendations).
