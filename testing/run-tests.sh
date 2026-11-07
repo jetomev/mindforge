@@ -460,6 +460,7 @@ if begin "rot: escalates by key when the count moves"; then
   out=$(mf rot)
   check "another repo's history does not count" bash -c '! grep -q "days running" <<<"$1"' _ "$out"
   printf '2026-01-01\tR7\tMEMORY.md older than the file(s) it indexes: a.md\n2026-01-02\tR7\tMEMORY.md older than the file(s) it indexes: b.md c.md\n' > "$SB/state/rot.log"
+  rm -f "$SB/state/memory-summaries.snap"   # no baseline: the first-run proxy speaks
   : > "$SB/mem/MEMORY.md"; touch -d '2 days ago' "$SB/mem/MEMORY.md"; printf -- '---\nname: d\n---\n' > "$SB/mem/d.md"
   printf -- '- [d](d.md)\n' > "$SB/mem/MEMORY.md.tmp"; cat "$SB/mem/MEMORY.md.tmp" > "$SB/mem/MEMORY.md"; rm "$SB/mem/MEMORY.md.tmp"
   touch -d '2 days ago' "$SB/mem/MEMORY.md"
@@ -681,6 +682,27 @@ if begin "rot"; then
   echo b > "$SB/mem/b.md"
   out=$(mf rot)
   check "R4 names an unindexed file"       grep -q 'R4.*b.md' <<<"$out"
+  end
+fi
+
+# 0.1.11 · R7 compares summaries, not save times. Body edits were 51 days of
+# noise; a changed `description:` is what makes an index line wrong.
+if begin "rot: R7 by summary"; then
+  printf -- '---\nname: a\ndescription: the old summary\n---\nbody\n' > "$SB/mem/a.md"
+  printf -- '- [a](a.md) — the old summary\n' > "$SB/mem/MEMORY.md"
+  touch -d '1 hour ago' "$SB/mem/MEMORY.md"; touch -d '2 hours ago' "$SB/mem/a.md"
+  out=$(mf rot)
+  check "baseline run: nothing stale"            bash -c '! grep -q "R7" <<<"$1"' _ "$out"
+  check "the baseline is written"                grep -q '^a.md	the old summary' "$SB/state/memory-summaries.snap"
+  printf 'more body\n' >> "$SB/mem/a.md"
+  out=$(mf rot)
+  check "a body edit is not a stale index"       bash -c '! grep -q "R7" <<<"$1"' _ "$out"
+  sed -i 's/the old summary/a NEW summary/' "$SB/mem/a.md"
+  out=$(mf rot)
+  check "a changed summary is named"             grep -q 'R7.*summary changed.*a.md' <<<"$out"
+  printf -- '- [a](a.md) — a NEW summary\n' > "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "rewriting the index clears it"          bash -c '! grep -q "R7" <<<"$1"' _ "$out"
   end
 fi
 

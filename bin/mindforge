@@ -896,16 +896,43 @@ rot_checks() {
   # index line that contradicts the file it points at -- which is the failure
   # that actually bit: a fresh session read the one-line index, reported it as
   # the file's contents, and stated the opposite of what the file said.
-  # Proxy: any memory file written more recently than MEMORY.md itself.
+  #
+  # 0.1.11 · The first proxy was "any file saved after MEMORY.md". Every body
+  # edit tripped it, so it fired every session for weeks and was read as noise
+  # (51 days in rot.log). An index line summarises the file's `description:`,
+  # so that is what is compared now: a snapshot of every description is taken
+  # whenever MEMORY.md is rewritten, and a file whose description changed
+  # since then is named. With no snapshot yet (first run) the old proxy stands
+  # in, and the snapshot is taken.
   if [ -d "$MEM" ] && [ -r "$MEM/MEMORY.md" ]; then
-    # #38 · one find, not one stat per file (see R4).
-    local stale="" b
-    while IFS= read -r b; do
-      case "$b" in MEMORY.md|archive_index_*|"") continue;; esac
-      stale="$stale $b"
-    done < <(find "$MEM" -maxdepth 1 -name '*.md' -newer "$MEM/MEMORY.md" -printf '%f\n' 2>/dev/null | sort)
-    [ -n "$stale" ] && \
-      printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
+    local snapf="$STATE/memory-summaries.snap" idx_m cur stale="" b
+    idx_m=$(stat -c %Y "$MEM/MEMORY.md" 2>/dev/null)
+    # #38 · one awk over every file, not one process per file.
+    cur=$(awk 'FNR == 1 { n = FILENAME; sub(/.*\//, "", n); fm = 0 }
+               FNR == 1 && /^---/ { fm = 1; next }
+               fm && /^---/ { fm = 0; nextfile }
+               fm && /^description:/ { d = $0; sub(/^description: */, "", d); print n "\t" d; nextfile }' \
+          "$MEM"/*.md 2>/dev/null | grep -v '^MEMORY\.md	\|^archive_index_' | sort)
+    if [ -r "$snapf" ] && [ -n "$idx_m" ]; then
+      local snap_m; snap_m=$(head -1 "$snapf" | awk '{print $3}')
+      if [ -n "$snap_m" ] && [ "$idx_m" -le "$snap_m" ]; then
+        stale=$(join -t $'\t' <(tail -n +2 "$snapf") <(printf '%s\n' "$cur") 2>/dev/null \
+                | awk -F'\t' '$2 != $3 { printf " %s", $1 }')
+        [ -n "$stale" ] && \
+          printf 'R7\tthe summary changed since MEMORY.md was last written -- check the index line of:%s\n' "$stale"
+      else
+        { printf '# index-mtime %s\n' "$idx_m"; printf '%s\n' "$cur"; } > "$snapf" 2>/dev/null
+      fi
+    else
+      # #38 · one find, not one stat per file (see R4).
+      while IFS= read -r b; do
+        case "$b" in MEMORY.md|archive_index_*|"") continue;; esac
+        stale="$stale $b"
+      done < <(find "$MEM" -maxdepth 1 -name '*.md' -newer "$MEM/MEMORY.md" -printf '%f\n' 2>/dev/null | sort)
+      [ -n "$stale" ] && \
+        printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
+      [ -n "$idx_m" ] && { printf '# index-mtime %s\n' "$idx_m"; printf '%s\n' "$cur"; } > "$snapf" 2>/dev/null
+    fi
   fi
 
   lap 'R9'
