@@ -455,31 +455,20 @@ if begin "rot: escalates by key when the count moves"; then
   make_repo alpha; commit_unpushed alpha; seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"; hooks_json
   printf '2026-01-01\tR3\talpha has 3 unpushed commit(s)\n2026-01-02\tR3\talpha has 4 unpushed commit(s)\n' > "$SB/state/rot.log"
   out=$(mf rot)
-  check "third day with a new count turns red"  grep -q 'R3.*alpha has 1 unpushed.*3 days running' <<<"$out"
-  check "the red line asks the person"          grep -q 'ask the person' <<<"$out"
+  check "third day with a new count turns red"  grep -q 'R3.*alpha has 1 unpushed.*3 sessions -- fix it' <<<"$out"
   printf '2026-01-01\tR3\tbeta has 3 unpushed commit(s)\n2026-01-02\tR3\tbeta has 4 unpushed commit(s)\n' > "$SB/state/rot.log"
   out=$(mf rot)
-  check "another repo's history does not count" bash -c '! grep -q "days running" <<<"$1"' _ "$out"
+  check "another repo's history does not count" bash -c '! grep -q "sessions -- fix it" <<<"$1"' _ "$out"
   printf '2026-01-01\tR7\tMEMORY.md older than the file(s) it indexes: a.md\n2026-01-02\tR7\tMEMORY.md older than the file(s) it indexes: b.md c.md\n' > "$SB/state/rot.log"
   rm -f "$SB/state/memory-summaries.snap"   # no baseline: the first-run proxy speaks
   : > "$SB/mem/MEMORY.md"; touch -d '2 days ago' "$SB/mem/MEMORY.md"; printf -- '---\nname: d\n---\n' > "$SB/mem/d.md"
   printf -- '- [d](d.md)\n' > "$SB/mem/MEMORY.md.tmp"; cat "$SB/mem/MEMORY.md.tmp" > "$SB/mem/MEMORY.md"; rm "$SB/mem/MEMORY.md.tmp"
   touch -d '2 days ago' "$SB/mem/MEMORY.md"
   out=$(mf rot)
-  check "a changing file list keeps one key"    grep -q 'R7.*3 days running' <<<"$out"
+  check "a changing file list keeps one key"    grep -q 'R7.*3 sessions -- fix it' <<<"$out"
   end
 fi
 
-# 0.1.11 · @local: a repo kept on this machine on purpose stops nagging, visibly.
-if begin "rot: @local quiets R3 for that repo only"; then
-  make_repo alpha; make_repo beta; commit_unpushed alpha; commit_unpushed beta
-  seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"; hooks_json
-  printf 'alpha\tthe task\t3\tno\t-\nbeta\tthe task\t3\tno\t-\n@local alpha -- pushes wait on the maintainer\n' > "$SB/state/queue.md"
-  out=$(mf rot)
-  check "alpha is quiet"                        bash -c '! grep -q "R3.*alpha" <<<"$1"' _ "$out"
-  check "beta still reported"                   grep -q 'R3.*beta has 1 unpushed' <<<"$out"
-  end
-fi
 
 # #24: the scrub guard proves its tool works, and a partial scan says partial.
 HOOK="${MINDFORGE_HOOK_UNDER_TEST:-$ROOT/.githooks/pre-commit}"
@@ -540,7 +529,6 @@ if begin "session-start runs the rot check"; then
   check "inside the briefing tags"         bash -c 'sed -n "/^<session-briefing>/,/^<\/session-briefing>/p" <<<"$1" | grep -q "^rot check"' _ "$out"
   check "carries an R8 finding"            grep -q 'R8.*#7 is CLOSED' <<<"$out"
   check "the directive asks for findings"  grep -q 'Name every rot-check finding' <<<"$out"
-  check "the directive turns red into a question" grep -q 'days running.*ask the person\|ask the person in this first reply' <<<"$out"
   check "logs it to rot.log"               grep -q 'R8' "$SB/state/rot.log"
   end
 fi
@@ -697,10 +685,12 @@ if begin "rot: R7 by summary"; then
   check "the baseline is written"                grep -q '^a.md	the old summary' "$SB/state/memory-summaries.snap"
   printf 'more body\n' >> "$SB/mem/a.md"
   out=$(mf rot)
-  check "a body edit is not a stale index"       bash -c '! grep -q "R7" <<<"$1"' _ "$out"
+  check "a detail change is still caught"        grep -q 'R7.*details changed under an unchanged summary.*a.md' <<<"$out"
+  check "and not called a summary change"        bash -c '! grep -q "the summary changed" <<<"$1"' _ "$out"
   sed -i 's/the old summary/a NEW summary/' "$SB/mem/a.md"
   out=$(mf rot)
-  check "a changed summary is named"             grep -q 'R7.*summary changed.*a.md' <<<"$out"
+  check "a changed summary is named"             grep -q 'R7.*the summary changed.*a.md' <<<"$out"
+  check "once, not on both lines"                bash -c '! grep -q "details changed.*a.md" <<<"$1"' _ "$out"
   printf -- '- [a](a.md) — a NEW summary\n' > "$SB/mem/MEMORY.md"
   out=$(mf rot)
   check "rewriting the index clears it"          bash -c '! grep -q "R7" <<<"$1"' _ "$out"
@@ -923,7 +913,8 @@ if begin "heard: before each reply"; then
   check "nothing logged for a plain message"     [ ! -s "$SB/state/drift.log" ]
   out=$(prompt_json "these cards are horrible. I never asked for them. why you keep changing the way we work?" | mf heard)
   check "a correction is named"                  grep -q 'reads as a correction' <<<"$out"
-  check "and told to fix the source"             grep -q 'fix that source' <<<"$out"
+  check "and told to correct what misled it"     grep -q 'correct THAT' <<<"$out"
+  check "never to invent a new rule"             grep -q 'Do not write a new rule' <<<"$out"
   check "and logged to drift.log"                grep -q 'heard (.*I never asked' "$SB/state/drift.log"
   printf 'a bold line used as a heading\n' > "$SB/state/tone.pending"
   out=$(prompt_json "go on" | mf heard)
@@ -936,6 +927,8 @@ if begin "heard: before each reply"; then
   check "app wrapping is not the person"         bash -c '! grep -q correction <<<"$1"' _ "$out"
   mf heard --check "how many times do I have to say this" >/dev/null; rc=$?
   check "--check: a correction exits 0"          [ "$rc" -eq 0 ]
+  mf heard --check "coming along with new things I did not asked ever" >/dev/null; rc=$?
+  check "--check: his 11-06 wording is caught"   [ "$rc" -eq 0 ]
   mf heard --check "try the next build" >/dev/null; rc=$?
   check "--check: plain text exits 1"            [ "$rc" -eq 1 ]
   out=$(printf 'not json' | mf heard); rc=$?
@@ -968,6 +961,38 @@ if begin "tone finds a python that runs"; then
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
   check "no python that runs: the hook never blocks"    cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   unset MINDFORGE_TONE
+  end
+fi
+
+# 0.1.11 · memcheck: the two real failures of 2026-11-06, replayed. Each must be
+# refused; then the right way to write the same thing must pass.
+write_json() { "$PY" -c 'import json,sys; t,f,c=sys.argv[1:4]; print(json.dumps({"tool":t,"file_path":f,"content":c}))' "$@"; }
+edit_json()  { "$PY" -c 'import json,sys; f,o,n=sys.argv[1:4]; print(json.dumps({"tool":"Edit","file_path":f,"old_string":o,"new_string":n}))' "$@"; }
+if begin "memcheck: the night's failures are refused"; then
+  mkdir -p "$SB/home/.claude/rules"; echo "the agreement" > "$SB/home/.claude/CLAUDE.md"; echo "release rules" > "$SB/home/.claude/rules/release.md"
+  card=$'---\nname: mods\ntype: feedback\n---\nyour-turn card: use it for EVERY step he does.\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$card" | mf memcheck); rc=$?
+  check "the 10-29 card rule, written to memory: refused" cond '[ "$rc" -eq 1 ] && grep -q "rules do not live in memory" <<<"$out"'
+  good=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$'\nWhy: he said "please stop with this" (2026-11-06).\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$good" | mf memcheck); rc=$?
+  check "the same note pointing at its home: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  bad=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/mem/other.md"$'\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$bad" | mf memcheck); rc=$?
+  check "a 'home' that is another memory note: refused" cond '[ "$rc" -eq 1 ] && grep -q "is not such a file" <<<"$out"'
+  printf -- '---\nname: co\ntype: project\n---\n- Domains: free on 2026-09-28.\n' > "$SB/mem/project_co.md"
+  out=$(edit_json "$SB/mem/project_co.md" "- Domains: free on 2026-09-28." $'- Domains: free on 2026-09-28.\n- The site isn\'t live yet; buying the domain is his step.' | mf memcheck); rc=$?
+  check "the 09-28 domain line, undated: refused" cond '[ "$rc" -eq 1 ] && grep -q "no date" <<<"$out"'
+  out=$(edit_json "$SB/mem/project_co.md" "- Domains: free on 2026-09-28." $'- Domains: free on 2026-09-28.\n- As of 2026-11-07 (checked in the registry): the domain is registered; the site is not live yet.' | mf memcheck); rc=$?
+  check "the same fact with its date: passes"     cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  printf -- '---\nname: old\ntype: project\n---\n- waiting on him for the bank\n' > "$SB/mem/project_old.md"
+  out=$(edit_json "$SB/mem/project_old.md" "name: old" "name: old2" | mf memcheck); rc=$?
+  check "an old undated line the write leaves alone: not its business" [ "$rc" -eq 0 ]
+  out=$(write_json Write "$SB/elsewhere.md" "$card" | mf memcheck); rc=$?
+  check "a file outside memory: not checked"      cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  out=$(write_json Write "$SB/mem/MEMORY.md" "- [x](x.md) — not live yet" | mf memcheck); rc=$?
+  check "the index itself: not checked here"      [ "$rc" -eq 0 ]
+  out=$(printf 'not json' | mf memcheck); rc=$?
+  check "unreadable input: could not look (2), said" cond '[ "$rc" -eq 2 ] && grep -q "not checked" <<<"$out"'
   end
 fi
 
