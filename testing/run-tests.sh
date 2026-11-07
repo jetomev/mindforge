@@ -674,6 +674,17 @@ if begin "rot"; then
   end
 fi
 
+# 0.1.11 · R9 counts lines too: the loader reads the first 200 lines or 25 KB.
+if begin "rot: R9 by lines"; then
+  seq 10 > "$SB/home/.claude/CLAUDE.md"; hooks_json
+  for i in $(seq 1 190); do printf -- '- [m%s](m%s.md) — x\n' "$i" "$i"; done > "$SB/mem/MEMORY.md"
+  for i in $(seq 1 190); do : > "$SB/mem/m$i.md"; done; touch "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "190 short lines, under the byte budget: named" grep -q 'R9.*190 lines, past the 180-line budget' <<<"$out"
+  check "setup: the bytes alone were fine"       bash -c '! grep -q "bytes, past" <<<"$1"' _ "$out"
+  end
+fi
+
 # 0.1.11 · R7 compares summaries, not save times. Body edits were 51 days of
 # noise; a changed `description:` is what makes an index line wrong.
 if begin "rot: R7 by summary"; then
@@ -973,9 +984,19 @@ if begin "memcheck: the night's failures are refused"; then
   card=$'---\nname: mods\ntype: feedback\n---\nyour-turn card: use it for EVERY step he does.\n'
   out=$(write_json Write "$SB/mem/feedback_card.md" "$card" | mf memcheck); rc=$?
   check "the 10-29 card rule, written to memory: refused" cond '[ "$rc" -eq 1 ] && grep -q "rules do not live in memory" <<<"$out"'
-  good=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$'\nWhy: he said "please stop with this" (2026-11-06).\n'
+  printf 'the agreement\n- No buttons, not weird boxes (2026-11-06).\n' > "$SB/home/.claude/CLAUDE.md"
+  good=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$' -- "No buttons, not weird boxes"\nWhy: he said "please stop with this" (2026-11-06).\n'
   out=$(write_json Write "$SB/mem/feedback_card.md" "$good" | mf memcheck); rc=$?
-  check "the same note pointing at its home: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  check "the note pointing at its home, the rule there: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  nowords=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$'\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$nowords" | mf memcheck); rc=$?
+  check "a home named without the rule's words: refused" cond '[ "$rc" -eq 1 ] && grep -q "must also carry the rule" <<<"$out"'
+  missing=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/rules/release.md"$' -- "No buttons, not weird boxes"\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$missing" | mf memcheck); rc=$?
+  check "a home that does not hold the rule (missing): refused" cond '[ "$rc" -eq 1 ] && grep -q "are not in" <<<"$out"'
+  wrong=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$' -- "use the card for every step he does"\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$wrong" | mf memcheck); rc=$?
+  check "a home holding another rule (wrong words): refused" cond '[ "$rc" -eq 1 ] && grep -q "are not in" <<<"$out"'
   bad=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/mem/other.md"$'\n'
   out=$(write_json Write "$SB/mem/feedback_card.md" "$bad" | mf memcheck); rc=$?
   check "a 'home' that is another memory note: refused" cond '[ "$rc" -eq 1 ] && grep -q "is not such a file" <<<"$out"'

@@ -952,6 +952,16 @@ rot_checks() {
     [ "$sz" -gt "$MEMORY_MAX" ] && \
       printf 'R9\tMEMORY.md is %s bytes, past the %s-byte budget -- part of the index may already be silently dropped; compact it\n' \
         "$sz" "$MEMORY_MAX"
+    # 0.1.11 · The loader has a LINE limit too (the first 200 lines, or 25 KB,
+    # whichever comes first). Bytes alone missed it: an index of many short
+    # lines would be cut below the byte budget, without a word. Found when
+    # Middle-Earth's own pyramid turned out to cut its rule pages to their
+    # budget before delivering them, so a rule written there reached nobody
+    # (2026-11-06). Warned below the cap, while there is room to compact.
+    local ln; ln=$(grep -c '' "$MEM/MEMORY.md")
+    [ "$ln" -gt "${MINDFORGE_MEMORY_MAX_LINES:-180}" ] && \
+      printf 'R9\tMEMORY.md is %s lines, past the %s-line budget -- the loader reads only the first 200; compact it\n' \
+        "$ln" "${MINDFORGE_MEMORY_MAX_LINES:-180}"
   fi
 
   # R12 · a file that declares it is rewritten every session, and was not (#28)
@@ -1821,9 +1831,11 @@ PY
 # months older. And a fact written as a plan ("buying it is his step",
 # 09-28) was relayed as true on 11-06, a day after it stopped being true.
 # Two checks, on the lines a write ADDS to a memory note:
-#  1. A note of type feedback names the file where its rule lives
-#     ("Rule lives in: <path>", an existing L0 / L1 / CLAUDE.md file). The note
-#     keeps the story; the rule is written there.
+#  1. A note of type feedback names the file where its rule lives, with the
+#     rule's words as they stand there ("Rule lives in: <path> -- "<words>"",
+#     an existing L0 / L1 / CLAUDE.md file that holds those words). The note
+#     keeps the story; the rule is written there. A home that does not hold the
+#     words (missing, or another rule) is refused: pointing is not enough.
 #  2. A line that says something is still to happen ("not bought yet", "is his
 #     step", "waiting on him") carries the date it was true.
 # Called by an add-on's tool hook with the write as JSON on stdin:
@@ -1875,13 +1887,34 @@ if m and m.group(1) == "feedback":
         target == real(os.path.join(claude, "CLAUDE.md"))
         or os.path.dirname(target) == real(os.path.join(claude, "rules"))
         or os.path.basename(target) == "CLAUDE.md")
+    words = ""
+    if home_line:
+        q = re.search(r'["\u201c]([^"\u201d]{8,})["\u201d]', home_line.group(0) + new[home_line.end():].split("\n", 1)[0])
+        words = q.group(1) if q else ""
+    def norm(t):
+        return re.sub(r"\s+", " ", re.sub(r"[*_`]", "", t)).strip().lower()
+    if ok_home and not words:
+        problems.append(
+            "the line \"Rule lives in: " + home_line.group(1) + "\" must also carry the rule's own words, in "
+            "quotes, as they stand in that file, so the rule can be found there "
+            "(Rule lives in: <file> -- \"<the rule's words>\").")
+    elif ok_home:
+        try:
+            body = open(target, encoding="utf-8").read()
+        except OSError:
+            body = ""
+        if norm(words) not in norm(body):
+            problems.append(
+                "the rule's words \"" + words[:80] + "\" are not in " + home_line.group(1) + ". Write the rule "
+                "there first (the person's words, with the date; the agreement needs the person's yes), "
+                "then point to it.")
     if not ok_home:
         problems.append(
             "this is a rule (type: feedback), and rules do not live in memory: memory is only read "
             "when something brings it up. Write the rule, in the person's own words and with the date, "
             "in the file that owns it (~/.claude/CLAUDE.md for everything -- that one needs the "
             "person's yes --, a ~/.claude/rules/ file for one area, or the project's CLAUDE.md), and "
-            "keep here only the story of why, with a line \"Rule lives in: <that file>\"."
+            "keep here only the story of why, with the line: Rule lives in: <that file> -- \"<the rule's words>\"."
             + (f" The line names {home_line.group(1)}, which is not such a file." if home_line else ""))
 
 PENDING = re.compile(r"\bnot (yet )?(bought|live|created|registered|done|pushed|released|made|set up)\b"
