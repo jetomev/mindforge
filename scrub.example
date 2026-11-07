@@ -1,0 +1,11 @@
+# Copy to ~/.config/mindforge/scrub.local (or point MINDFORGE_SCRUB_LIST at it). Private: never commit the copy.
+# The pre-commit hook refuses any commit that adds one of these terms, anywhere, case-insensitive.
+#
+# One literal term per line. Lines starting with # are skipped. Put here what only YOU know is private:
+# your real name, family names, street, employer, account numbers you type often, private hostnames.
+# The generic patterns (emails, private IPs, key material, home paths) are already in the hook itself.
+#
+# Examples (replace them with your own):
+Jane Example
+Example Street
+examplecorp
