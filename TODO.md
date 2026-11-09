@@ -7,6 +7,32 @@ mindForge is the start-of-session briefing and end-of-session record for working
 **Updated after every step.** The full story behind each item is in its GitHub issue.
 
 ---
+## 2026-11-06 · The brain (0.1.11) — no more missed agreements
+*The maintainer, 11-06: "check where mindforge is making mistakes… let's make mindForge the brain… get it done before Sunday." Building on branch `brain` in a side copy (`~/.cache/mindforge-dev/brain`), so nothing live changes until his yes and his test. Full write-up: `docs/AUDIT-2026-11-06.md`.*
+- [x] **The audit**: every rule file, 41 project rule files, all memory notes, the add-ons and mindForge itself; each of the night's misses traced back to the maintainer's own words in the prompt log
+  Four causes: rules live in nine places and the newest note wins · memory saves the assistant's rewording, not his words · facts have no date and no check · fixes stop short (the card add-on is still loaded)
+- [x] **The research**: about twenty similar systems (Claude Code memory and hooks, Cline, Cursor, Kiro, Letta, mem0, Zep, ChatGPT memory, Google's alert rules); almost all let the newest note win, which is exactly our bug
+- [x] **His words checked at the source** (11-06 night): his 23:22 message adds "coming along with new things I did not asked ever" and "for Claude to not forget how I like to work, and to remember things about the projects"; his freeze: nothing new for him unless he asked. mindForge's Vault notes read (its 08-29 rule: rules must not live in memory, which 56 now do)
+- [x] **Plan v2 sent for checking** (11-06 ~23:20): every item tied to his words, with what he would see; the 56 memory rules sorted (6 apply to everything but live only in memory)
+- [x] **Plan v2 checked line by line against his words** (11-06 23:31): keep 1, 6, 9 · change 2, 3, 4, 5, 7, 8, 12 · drop 10 (privacy sweep), 11 (the install chore), 13 (memory history), 14 (the daily question): "new things I did not asked ever"
+- [x] **The repairs revised to the marks** (`2e47991`, side copy): the daily question and the "local on purpose" mark removed; R7 still names details changed under an unchanged summary; a correction mends the wrong copy and never invents a rule; the memory guard (`mindforge memcheck`): no rule in plain memory without its home file, no "not yet" without a date. 341 checks
+- [x] **Trials**: the 10-29 card rule and the 09-28 domain line, replayed, are refused; his four corrections from 11-06 caught; five ordinary messages quiet; the add-on copy refuses the card rule with mindForge's reason (its own test)
+- [x] **Plan v3 sent for the second check** (11-07 00:15), with his original words for every rule that moves (tables were "a suggestion", not "always")
+- [x] **Plan v3 checked** (11-06 23:45): keep 1, 2, 3, 5, 6, 7, 8, 9, 12's intent; change 4 (call it the maker's proposed repair; prove a wrong or missing home is refused); drop 10, 11, 13, 14
+- [x] **Sent back** (`b6c0542`, `9378b40`): the memory guard looks for the rule's words in the file a note points to (missing, wrong, or no words: refused, each seen failing first); R7 trial on a copy of the real memory; R9 also counts lines (the loader reads only 200); the test suite's isolation check no longer trips on the add-ons' files. 346 checks
+- [x] **A fifth root cause** added to the audit: rules cut to fit before delivery (the other rule system's freeze reached nobody)
+- [x] **The send-back checked** (11-06 23:52): keep 1–9 and 12; drop 10, 11, 13, 14; one overclaim reworded ("nothing has been lost" → the index loads whole today; earlier days not proven); "leave repeated rules until their replacements reach everyone"
+- [x] **His glance drafted** (11-07 00:10): the exact lines for his agreement (56 → 59, nothing removed) and the release rules, each in his words with its date; with the reviewers for one last look
+- [x] **The glance and its papers checked** (11-07 00:00 → 00:05, after one round of fixes): every quote whole and dated with its shortenings marked, whole before-and-after copies of every file the plan touches, and real runs on his real messages and the real memory folder. Verdict: ready to take to him for his yes. Not judged: words reaching a reply live (proven in the first live session after his yes)
+- [x] **Release paperwork ready on the side copy** (`08acc0e`): README, changelog, METHOD §12 "who said it beats when it was written"; six issue drafts written and checked against the private word list (not posted)
+- [x] **His yes** (11-07 09:03, his words: "all yes, to the mindforge plan")
+- [x] **Applied, exactly the passed papers** (11-07 09:05–09:08, backups in `~/.claude/backups/*-20261107-090535-mindforge`): the card add-on off (one settings line); his agreement and the release rules match the AFTER copies (56 → 59 lines, nothing removed); 34 rule notes point to their home with the words that stand there (each accepted by the real guard)
+- [x] **The 21 rules got homes** (11-09, the reviewers chose this over a partial guard): each placed in the rules file that owns it, in his words as typed, Claude's own lessons labeled as lessons; lines only added, backups in `~/.claude/backups/rule-homes-20261109-170920`; no repeated note emptied. All 56 rule notes now pass the real guard on an ordinary edit
+- [x] **The 21 placements checked** (11-09 17:03–17:21, four rounds): his testing line stays a preference, both game copies say the game is paused, "[n]ameKit" left unresolved, originals never seen are marked as such; 56 of 56 notes differ from their backups by the pointer alone; guard trials 12 of 12
+- [ ] **FIRST NEXT TIME: a fresh session shows the new lines arriving** (it needs his word to open one; the guard stays OFF and every repeat stays until it has). As of 2026-11-09: not done. The work is on branch `brain`, pushed, not merged into main
+- [ ] **Turn on the checks** (after that proof): the session-lights add-on's new version + his style note
+- [ ] **Release 0.1.11**: issues opened and closed, README, changelog, his test, then the one AUR push
+
 ## Found 2026-10-22 — the CLAUDE.md review
 *Spotted while writing this project's CLAUDE.md; the maintainer asked for them on the board.*
 - [ ] **README tells people to copy `scrub.example`**, which doesn't exist in the repo: add the example file or fix the line
