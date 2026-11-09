@@ -1880,8 +1880,10 @@ problems = []
 
 m = re.search(r"^\s*type:\s*(\w+)", new, re.M)
 if m and m.group(1) == "feedback":
-    home_line = re.search(r"^[*_\s-]*rule lives in:?[*_]*\s*`?([^`\s]+)`?", new, re.M | re.I)
-    target = real(home_line.group(1)) if home_line else ""
+    # A path with a space in it (a synced folder) goes in backticks.
+    home_line = re.search(r"^[*_\s-]*rule lives in:?[*_]*\s*(?:`([^`\n]+)`|(\S+))", new, re.M | re.I)
+    home_name = (home_line.group(1) or home_line.group(2)) if home_line else ""
+    target = real(home_name) if home_line else ""
     claude = os.path.join(home, ".claude")
     ok_home = bool(target) and os.path.isfile(target) and (
         target == real(os.path.join(claude, "CLAUDE.md"))
@@ -1895,7 +1897,7 @@ if m and m.group(1) == "feedback":
         return re.sub(r"\s+", " ", re.sub(r"[*_`]", "", t)).strip().lower()
     if ok_home and not words:
         problems.append(
-            "the line \"Rule lives in: " + home_line.group(1) + "\" must also carry the rule's own words, in "
+            "the line \"Rule lives in: " + home_name + "\" must also carry the rule's own words, in "
             "quotes, as they stand in that file, so the rule can be found there "
             "(Rule lives in: <file> -- \"<the rule's words>\").")
     elif ok_home:
@@ -1905,7 +1907,7 @@ if m and m.group(1) == "feedback":
             body = ""
         if norm(words) not in norm(body):
             problems.append(
-                "the rule's words \"" + words[:80] + "\" are not in " + home_line.group(1) + ". Write the rule "
+                "the rule's words \"" + words[:80] + "\" are not in " + home_name + ". Write the rule "
                 "there first (the person's words, with the date; the agreement needs the person's yes), "
                 "then point to it.")
     if not ok_home:
@@ -1915,7 +1917,7 @@ if m and m.group(1) == "feedback":
             "in the file that owns it (~/.claude/CLAUDE.md for everything -- that one needs the "
             "person's yes --, a ~/.claude/rules/ file for one area, or the project's CLAUDE.md), and "
             "keep here only the story of why, with the line: Rule lives in: <that file> -- \"<the rule's words>\"."
-            + (f" The line names {home_line.group(1)}, which is not such a file." if home_line else ""))
+            + (f" The line names {home_name}, which is not such a file." if home_line else ""))
 
 PENDING = re.compile(r"\bnot (yet )?(bought|live|created|registered|done|pushed|released|made|set up)\b"
                      r"|\b(isn.t|is not|aren.t|are not) (live|bought|created|registered|made) yet\b"

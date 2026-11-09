@@ -993,6 +993,10 @@ if begin "memcheck: the night's failures are refused"; then
   good=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$' -- "No buttons, not weird boxes"\nWhy: he said "please stop with this" (2026-11-06).\n'
   out=$(write_json Write "$SB/mem/feedback_card.md" "$good" | mf memcheck); rc=$?
   check "the note pointing at its home, the rule there: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  mkdir -p "$SB/home/Google Drive/book"; printf 'Venues are fluid, the docs are the spine.\n' > "$SB/home/Google Drive/book/CLAUDE.md"
+  spaced=$'---\nname: mods\ntype: feedback\n---\nRule lives in: `'"$SB/home/Google Drive/book/CLAUDE.md"$'` -- "Venues are fluid"\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$spaced" | mf memcheck); rc=$?
+  check "a home path with a space, in backticks: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
   nowords=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$'\n'
   out=$(write_json Write "$SB/mem/feedback_card.md" "$nowords" | mf memcheck); rc=$?
   check "a home named without the rule's words: refused" cond '[ "$rc" -eq 1 ] && grep -q "must also carry the rule" <<<"$out"'
