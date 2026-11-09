@@ -13,7 +13,7 @@ Newest first.
   - **`mindforge memcheck`**: rules do not live in memory. A note that holds one names its home file and quotes the words that stand there (a missing or wrong home is refused); a new "still to happen" line carries its date. Replays of the night's two memory mistakes are refused. 12 checks.
   - **The test harness** no longer trips its isolation check on the app add-ons' own files in the state folder.
   - Called by the session-lights add-on, which every session already loads, so nothing new is installed by hand.
-  - 346 checks (was 302), all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0 (no linter in this repo; nothing new).
+  - 347 checks (was 302), all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0 (no linter in this repo; nothing new).
 
 - 🗺 **A step's progress lines reach its board.** Lines indented under a TODO step that are not steps themselves (`  - built on Monday`, `    Progress: …`) now join that step's detail on the page. Progress had been written there on purpose, so the step's first words (its id, which links it to other boards) never change, and no board showed it. 2 checks, the first seen failing on the old code; 302 checks.
 - 🗺 **Boards: every project's page beside the chat.** The maintainer: *"all projects need their own project

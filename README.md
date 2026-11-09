@@ -18,7 +18,7 @@ cannot be forgotten because it does not depend on remembering.
 > Windows laptop running Git Bash, has used it since mid-September and found
 > fourteen defects of its own; with 0.1.9 every one has a fix, and the
 > Windows-only ones wait for that laptop's next run to be proven there. Its
-> **automated test suite** has 346 checks. Every check it makes
+> **automated test suite** has 347 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 true. Still: one user, and we publish early and say so.
 
@@ -344,7 +344,7 @@ the version and changelog match, and the tests pass (#41).
 
 **Not yet demonstrated:** the drift log holds one note in a month, so drift
 instrumentation is a designed mechanism, not a proven result. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 346 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 347 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
 the release script, R11, the tie alert, the chime, the active project, one repo
 seen under two spellings of its path, the hooks command, the Windows memory
