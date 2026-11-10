@@ -1854,7 +1854,7 @@ memcheck() {
   local py; py=$(find_python) || { echo "mindforge memcheck: no python that runs -- not checked"; return 2; }
   local code
   code=$(cat <<'PY'
-import json, os, re, shlex, sys
+import json, os, re, shlex, shutil, sys
 mem, home, kind = sys.argv[1:4]
 try:
     w = json.load(sys.stdin)
@@ -1862,7 +1862,7 @@ except ValueError:
     print("mindforge memcheck: the write could not be read -- not checked"); sys.exit(2)
 
 MEM_PATH = re.compile(r"\.claude/projects/[^/\s\"']+/memory(?![\w-])|(?<![\w./-])MEMORY\.md\b")
-INLINE_WRITE = re.compile(r"open\([^)\n]*,\s*[\"'][wax+]|\.write_(?:text|bytes)\(|shutil\.(?:copy|move)|"
+INLINE_WRITE = re.compile(r"open\(.*?,\s*[\"'][wax+]|\.write_(?:text|bytes)\(|shutil\.(?:copy|move)|"
                           r"os\.(?:remove|rename|replace|unlink)\(|\.unlink\(|\.rename\(|writeFileSync|writeFile\(")
 
 def split_shell(text):
@@ -1891,16 +1891,46 @@ def split_shell(text):
     out.append("".join(cur))
     return out
 
-def shell_change(cmd):
-    """What in this command changes a memory file, or None. Reading is not a change."""
-    if not MEM_PATH.search(cmd):
+def expand(p):
+    return os.path.realpath(os.path.expanduser(p))
+
+INTERPRETERS = {"bash", "sh", "zsh", "dash", "fish", "python", "python3", "perl", "ruby", "node", "source", "."}
+
+def script_of(toks, here):
+    """The script file this command runs, or None."""
+    verb = os.path.basename(toks[0]); path = None
+    if verb in INTERPRETERS:
+        for t in toks[1:]:
+            if t in ("-c", "-e", "-"):
+                return None                      # inline: read as part of the command
+            if not t.startswith("-"):
+                path = t; break
+    elif "/" in toks[0]:
+        path = toks[0]
+    else:
+        found = shutil.which(toks[0])
+        if found and expand(found).startswith(expand(home) + "/"):
+            path = found
+    if not path or "$" in path:
         return None
-    if INLINE_WRITE.search(cmd):
+    path = expand(path if path.startswith(("/", "~")) else os.path.join(here, path))
+    if not os.path.isfile(path) or path.endswith("/bin/mindforge"):   # mindForge reads memory, never writes it
+        return None
+    return path
+
+def shell_change(cmd, cwd="", depth=0):
+    """What in this command changes a memory file, or None. Reading is not a change."""
+    in_mem_at_start = bool(cwd) and bool(re.search(r"\.claude/projects/[^/]+/memory(/|$)", expand(cwd)))
+    if depth and not re.search(r"\.claude/projects/[^/\s\"']+/memory", cmd):
+        return script_change(cmd, cwd, depth)        # it never names the folder; a script it runs still counts
+    if not MEM_PATH.search(cmd) and not in_mem_at_start:
+        return script_change(cmd, cwd, depth)
+    if MEM_PATH.search(cmd) and INLINE_WRITE.search(cmd):
         return "inline code that writes, in a command naming the memory folder"
     # a here-document is data for the program it feeds, not shell words
     body = re.sub(r"<<-?\s*(['\"]?)(\w+)\1.*?^\s*\2\s*$", " ", cmd, flags=re.S | re.M)
     names = {m.group(1) for m in re.finditer(r"(?:^|[\s;&])(\w+)=[\"']?[^\s;&]*\.claude/projects/[^/\s\"']+/memory", body)}
-    in_mem = False
+    in_mem = in_mem_at_start
     def is_mem(tok):
         if MEM_PATH.search(tok):
             return True
@@ -1923,8 +1953,9 @@ def shell_change(cmd):
         if not toks:
             continue
         verb = os.path.basename(toks[0]); args = [t for t in toks[1:] if not t.startswith("-")]
-        if verb == "cd" and args and is_mem(args[0]):
-            in_mem = True; continue
+        if verb == "cd":
+            in_mem = bool(args) and is_mem(args[0])
+            continue
         for m in re.finditer(r"(?<![<>&\d=-])(\d?>>?)\s*([^\s;|&)<>]+)", seg):
             target = m.group(2).strip("\"'")
             if target != "/dev/null" and not target.startswith("&") and is_mem(target):
@@ -1941,14 +1972,48 @@ def shell_change(cmd):
             return verb + " into the memory folder"
         if verb == "dd" and any(t.startswith("of=") and is_mem(t[3:]) for t in toks[1:]):
             return "dd into a memory file"
+    return script_change(cmd, cwd, depth)
+
+def script_change(cmd, cwd, depth):
+    """A script this command runs by name, read before it runs, one level of scripts deep."""
+    if depth > 1:
+        return None
+    here = cwd or os.getcwd()
+    body = re.sub(r"<<-?\s*(['\"]?)(\w+)\1.*?^\s*\2\s*$", " ", cmd, flags=re.S | re.M)
+    for seg in split_shell(body):
+        seg = re.sub(r"^(?:do|then|else|elif|if|while|!)\s+", "", seg.strip().lstrip("({ "))
+        try:
+            toks = shlex.split(seg, comments=False)
+        except ValueError:
+            toks = seg.split()
+        while toks and re.match(r"^\w+=", toks[0]):
+            toks = toks[1:]
+        if not toks:
+            continue
+        if toks[0] == "cd" and len(toks) > 1 and "$" not in toks[1]:
+            here = expand(toks[1] if toks[1].startswith(("/", "~")) else os.path.join(here, toks[1]))
+            continue
+        path = script_of(toks, here)
+        if not path:
+            continue
+        try:
+            if os.path.getsize(path) > 2_000_000:
+                continue
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        hit = shell_change(text, os.path.dirname(path), depth + 1)
+        if hit:
+            return "the script " + os.path.basename(path) + ": " + hit
     return None
 
 if kind == "shell":
-    hit = shell_change(w.get("command") or "")
+    hit = shell_change(w.get("command") or "", w.get("cwd") or "")
     if hit:
         print("mindforge memcheck refused this shell command: it changes a memory file (" + hit + "), and a shell "
               "write skips the checks a note has to pass. Make the change with the Write or Edit tool. "
-              "If the command only reads, send its output somewhere outside the memory folder.")
+              "If this is a mistake and nothing here changes memory: send any output somewhere outside the memory "
+              "folder, or run the part that doesn't touch memory on its own, without naming that folder.")
         sys.exit(1)
     sys.exit(0)
 

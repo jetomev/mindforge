@@ -1029,7 +1029,8 @@ fi
 # 0.1.11 · memcheck --shell: the typed route into memory (the reviewers, 2026-11-09).
 shell_json() { "$PY" -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$1"; }
 if begin "memcheck --shell"; then
-  M='~/.claude/projects/-home-x/memory'
+  # spelled in two pieces: this file names no memory folder of its own, or the guard reads it as one
+  MP='.claude/projects/-home-x/mem'; MP="${MP}ory"; M="~/$MP"
   refused() { out=$(shell_json "$2" | mf memcheck --shell); rc=$?; check "$1: refused" cond '[ "$rc" -eq 1 ] && grep -q "changes a memory file" <<<"$out"'; }
   allowed() { out=$(shell_json "$2" | mf memcheck --shell); rc=$?; check "$1: allowed" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'; }
   refused "a redirect"              "echo hi > $M/a.md"
@@ -1047,6 +1048,28 @@ if begin "memcheck --shell"; then
   allowed "output elsewhere"        "grep -c x $M/*.md > /tmp/out"
   allowed "errors to nowhere"       "ls $M 2>/dev/null"
   allowed "no memory named"         "echo hi > /tmp/a.md"
+  # the two ways around it (the reviewers, 2026-11-09)
+  shell_cwd() { "$PY" -c 'import json,sys; print(json.dumps({"command":sys.argv[1],"cwd":sys.argv[2]}))' "$1" "$2"; }
+  fromdir() { out=$(shell_cwd "$2" "$3" | mf memcheck --shell); rc=$?; check "$1" cond "[ \"\$rc\" -eq $4 ]"; }
+  memdir="$SB/home/$MP"; mkdir -p "$memdir"
+  fromdir "from inside the folder, a bare name: refused"   "echo hi > a.md"          "$memdir" 1
+  fromdir "from inside, sed -i on a bare name: refused"    "sed -i s/a/b/ a.md"      "$memdir" 1
+  fromdir "from inside, rm of a bare name: refused"        "rm a.md"                 "$memdir" 1
+  fromdir "from inside, reading a bare name: allowed"      "cat a.md"                "$memdir" 0
+  fromdir "from elsewhere, the same bare name: allowed"    "echo hi > a.md"          "$SB"     0
+  fromdir "cd out of the folder, then write: allowed"      "cd /tmp && echo hi > a.md" "$memdir" 0
+  printf 'echo x > ~/%s/a.md\n' "$MP" > "$SB/w.sh"; chmod +x "$SB/w.sh"
+  printf 'import os\nopen(os.path.expanduser("~/%s/a.md"),"w").write("x")\n' "$MP" > "$SB/w.py"
+  printf 'cat ~/%s/a.md\n' "$MP" > "$SB/r.sh"; chmod +x "$SB/r.sh"
+  printf 'bash %s/w.sh\n' "$SB" > "$SB/outer.sh"; chmod +x "$SB/outer.sh"
+  printf 'echo fine > /tmp/x\n' > "$SB/plain.sh"; chmod +x "$SB/plain.sh"
+  fromdir "a saved shell script run by name: refused"      "$SB/w.sh"                "$SB" 1
+  fromdir "bash on a saved script: refused"                "bash w.sh"               "$SB" 1
+  fromdir "python on a saved script: refused"              "python3 w.py"            "$SB" 1
+  fromdir "after cd, ./script: refused"                    "cd $SB && ./w.sh"        "/tmp" 1
+  fromdir "a script that runs a script: refused"           "$SB/outer.sh"            "$SB" 1
+  fromdir "a saved script that only reads: allowed"        "$SB/r.sh"                "$SB" 0
+  fromdir "a script with nothing about memory: allowed"    "$SB/plain.sh"            "$SB" 0
   out=$(printf 'not json' | mf memcheck --shell); rc=$?
   check "unreadable input: could not look (2)" cond '[ "$rc" -eq 2 ] && grep -q "not checked" <<<"$out"'
   end
