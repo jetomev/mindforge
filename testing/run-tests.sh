@@ -914,7 +914,7 @@ if begin "tone notes instead of blocking"; then
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
   check "no block by default"                    bash -c '! grep -q block <<<"$1"' _ "$out"
   check "the person still sees the alert"        grep -q '"systemMessage": *"tie alert.*noted' <<<"$out"
-  check "the tells wait for the next turn"       grep -q 'status-report opener' "$SB/state/tone.pending"
+  check "the tells wait for this session's turn"  grep -q 'status-report opener' "$SB/state/tone.pending.$SID"
   check "still logged"                           grep -q 'status-report opener' "$SB/state/tone.log"
   end
 fi
@@ -932,10 +932,26 @@ if begin "heard: before each reply"; then
   check "and told to correct what misled it"     grep -q 'correct THAT' <<<"$out"
   check "never to invent a new rule"             grep -q 'Do not write a new rule' <<<"$out"
   check "and logged to drift.log"                grep -q 'heard (.*I never asked' "$SB/state/drift.log"
-  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending"
+  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending.s"
   out=$(prompt_json "go on" | mf heard)
   check "last reply's tells come forward"        grep -q 'last reply was caught with: a bold line' <<<"$out"
-  check "and are used once"                      [ ! -e "$SB/state/tone.pending" ]
+  check "and are used once"                      [ ! -e "$SB/state/tone.pending.s" ]
+  # F-1 (the maintainer's 0.1.11 test): one session's slip reached a brand-new
+  # session, which was told its "last reply" broke a rule it had never written.
+  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending.other"
+  out=$(prompt_json "go on" | mf heard)
+  check "another session's tells stay out"       bash -c '! grep -q "caught with" <<<"$1"' _ "$out"
+  check "and wait for that session"              [ -e "$SB/state/tone.pending.other" ]
+  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending"
+  out=$(prompt_json "go on" | mf heard)
+  check "the shared file of 0.1.11 is not read"  bash -c '! grep -q "caught with" <<<"$1"' _ "$out"
+  check "and is cleared"                         [ ! -e "$SB/state/tone.pending" ]
+  touch -d "3 days ago" "$SB/state/tone.pending.other"
+  prompt_json "go on" | mf heard >/dev/null
+  check "a session's tells older than 2 days go" [ ! -e "$SB/state/tone.pending.other" ]
+  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending.$SID"
+  out=$(printf '{"prompt":"go on"}' | mf heard)
+  check "the add-on's route: the session from env" grep -q 'last reply was caught with' <<<"$out"
   mkdir -p "$SB/home/.config/mindforge"; printf 'Steps he does: intro, numbered steps, what he sees.\n' > "$SB/home/.config/mindforge/turn.local"
   out=$(prompt_json "go on" | mf heard)
   check "turn.local replaces the default note"   grep -q 'Steps he does' <<<"$out"

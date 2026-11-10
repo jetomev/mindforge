@@ -1682,7 +1682,10 @@ alert = f"tie alert: {tells}"
 # front of the next reply. MINDFORGE_TONE=block brings the old rewrite back.
 if os.environ.get("MINDFORGE_TONE", "note") != "block":
     try:
-        with open(os.path.join(state, "tone.pending"), "w", encoding="utf-8") as f:
+        # F-1 (0.1.12) · one file per session: a shared one handed this slip to
+        # whichever session spoke next, even a brand-new one.
+        sid = re.sub(r"[^A-Za-z0-9_-]", "", hook.get("session_id") or os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+        with open(os.path.join(state, "tone.pending" + ("." + sid if sid else "")), "w", encoding="utf-8") as f:
             f.write(tells + "\n")
     except OSError:
         pass
@@ -1787,8 +1790,20 @@ if not note:
             "no bold line used as a heading, no form labels."]
 parts.append("mindforge turn note: " + " ".join(note))
 
-pend = os.path.join(state, "tone.pending")
-if os.path.isfile(pend):
+# F-1 (0.1.12) · only THIS session's slips: the maintainer's first message to a
+# brand-new session was answered with another session's "your last reply was
+# caught". The shared file of 0.1.11 is cleared unread, and a session's file
+# left for two days (it ended before speaking again) is cleared too.
+import glob, time
+safe = re.sub(r"[^A-Za-z0-9_-]", "", hook.get("session_id") or sid or "")
+for old in [os.path.join(state, "tone.pending")] + glob.glob(os.path.join(state, "tone.pending.*")):
+    try:
+        if old.endswith("tone.pending") or time.time() - os.path.getmtime(old) > 2 * 86400:
+            os.remove(old)
+    except OSError:
+        pass
+pend = os.path.join(state, "tone.pending." + safe) if safe else ""
+if pend and os.path.isfile(pend):
     try:
         tells = open(pend, encoding="utf-8").read().strip()
         os.remove(pend)
