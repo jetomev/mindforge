@@ -277,6 +277,46 @@ Two more lessons from the same morning (#28):
   and every edited one became two documents disagreeing with each other. The top
   of a page is still read after the bottom changes.
 
+## 12. Who said it beats when it was written
+
+One night (2026-11-06) the assistant missed three agreements in an hour. None
+had been forgotten in the usual sense. Each was beaten by something written
+later:
+
+- A 10-29 memory line said to use a card "for EVERY step he does". The
+  maintainer had picked the card as one of four ideas ("do 1, 2, 4, 5" …
+  "looks good!"); "every step" was the assistant's paraphrase. It overrode a
+  months-old way of working, and nothing compared the two.
+- "We will add [a project] to the company site" became "the company site is
+  only for [the others]". The narrower paraphrase sat below the broader words
+  and won.
+- "Buying the domain is his step", true on 09-28, was relayed as fact on 11-06,
+  a day after it stopped being true.
+
+Most memory systems for AI agents let the newest note win (mem0 replaces;
+Zep dates the old fact out; Letta overwrites). For an agreement with a person
+that is the wrong rule. The shape:
+
+> **Rules live where they are always loaded, in the person's own words with the
+> date** (L0, L1, the project's CLAUDE.md), never in memory, which is read only
+> when something brings it up. **A memory note that holds a rule names that home
+> and quotes the words that stand there**, and `mindforge memcheck` refuses it
+> otherwise. **A line saying something is still to happen carries its date.**
+> When the person corrects the assistant, the fix is to the copy that misled it,
+> never a new rule (`mindforge heard`).
+
+Two more lessons from the same night:
+
+- **A rule must arrive whole.** A second rule system cut each page to its size
+  budget before delivering it, so its newest rule, sitting at the end of an
+  over-budget page, reached nobody. A budget is a warning to trim by hand,
+  never a knife. R9 now counts lines as well as bytes, because the loader reads
+  only the first 200 lines of the memory index.
+- **A change to how the person works is checked against the person's words
+  before it is built.** Every item of this release went through a line-by-line
+  reading against his quotes; four were dropped as "new things I did not asked
+  ever", and one claim was reworded because the checks did not prove it.
+
 ---
 
 ## What we can honestly claim

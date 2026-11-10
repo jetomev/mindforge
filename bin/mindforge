@@ -592,7 +592,10 @@ prefetch_refs() {
 # against the session. These are the files that declare it.
 handoff_files() {
   [ -d "$MEM" ] || return 0
-  grep -lE '^[[:space:]]*rewritten_by:[[:space:]]*session[[:space:]]*$' "$MEM"/*.md 2>/dev/null
+  # An archived copy keeps the handoff's frontmatter but is never rewritten:
+  # R12 flagged each one forever (filed 2026-10-19, seen again 2026-11-09).
+  grep -lE '^[[:space:]]*rewritten_by:[[:space:]]*session[[:space:]]*$' "$MEM"/*.md 2>/dev/null \
+    | grep -v '/archive_index_'
 }
 # The start ("YYYY-MM-DD HH:MM") of the last session that counts: a wrapped one,
 # or one that lasted MINDFORGE_HANDOFF_MIN minutes (30) -- Desktop's short
@@ -883,16 +886,55 @@ rot_checks() {
   # index line that contradicts the file it points at -- which is the failure
   # that actually bit: a fresh session read the one-line index, reported it as
   # the file's contents, and stated the opposite of what the file said.
-  # Proxy: any memory file written more recently than MEMORY.md itself.
+  #
+  # 0.1.11 · The first proxy was "any file saved after MEMORY.md". Every body
+  # edit tripped it, so it fired every session for weeks and was read as noise
+  # (51 days in rot.log). An index line summarises the file's `description:`,
+  # so a snapshot of every description is taken whenever MEMORY.md is
+  # rewritten, and a file whose description changed since is named on its own
+  # line, apart from files whose details changed under the same summary (the
+  # old proxy, kept: the reviewers asked that those still be caught). With no
+  # snapshot yet (first run) only the old proxy speaks, and the snapshot is taken.
   if [ -d "$MEM" ] && [ -r "$MEM/MEMORY.md" ]; then
-    # #38 · one find, not one stat per file (see R4).
-    local stale="" b
-    while IFS= read -r b; do
-      case "$b" in MEMORY.md|archive_index_*|"") continue;; esac
-      stale="$stale $b"
-    done < <(find "$MEM" -maxdepth 1 -name '*.md' -newer "$MEM/MEMORY.md" -printf '%f\n' 2>/dev/null | sort)
-    [ -n "$stale" ] && \
-      printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
+    local snapf="$STATE/memory-summaries.snap" idx_m cur stale="" b
+    idx_m=$(stat -c %Y "$MEM/MEMORY.md" 2>/dev/null)
+    # #38 · one awk over every file, not one process per file.
+    cur=$(awk 'FNR == 1 { n = FILENAME; sub(/.*\//, "", n); fm = 0 }
+               FNR == 1 && /^---/ { fm = 1; next }
+               fm && /^---/ { fm = 0; nextfile }
+               fm && /^description:/ { d = $0; sub(/^description: */, "", d); print n "\t" d; nextfile }' \
+          "$MEM"/*.md 2>/dev/null | grep -v '^MEMORY\.md	\|^archive_index_' | sort)
+    if [ -r "$snapf" ] && [ -n "$idx_m" ]; then
+      local snap_m; snap_m=$(head -1 "$snapf" | awk '{print $3}')
+      if [ -n "$snap_m" ] && [ "$idx_m" -le "$snap_m" ]; then
+        stale=$(join -t $'\t' <(tail -n +2 "$snapf") <(printf '%s\n' "$cur") 2>/dev/null \
+                | awk -F'\t' '$2 != $3 { printf " %s", $1 }')
+        [ -n "$stale" ] && \
+          printf 'R7\tthe summary changed since MEMORY.md was last written -- check the index line of:%s\n' "$stale"
+        # The details can change under an unchanged summary, and the index line
+        # can go wrong with them (the reviewers' point, 2026-11-07): those are
+        # still named, on their own line, so the two kinds read apart.
+        local detail="" b2
+        while IFS= read -r b2; do
+          case "$b2" in MEMORY.md|archive_index_*|"") continue;; esac
+          case " $stale " in *" $b2 "*) continue;; esac
+          detail="$detail $b2"
+        done < <(find "$MEM" -maxdepth 1 -name '*.md' -newer "$MEM/MEMORY.md" -printf '%f\n' 2>/dev/null | sort)
+        [ -n "$detail" ] && \
+          printf 'R7\tdetails changed under an unchanged summary since MEMORY.md was last written -- check the index line still holds:%s\n' "$detail"
+      else
+        { printf '# index-mtime %s\n' "$idx_m"; printf '%s\n' "$cur"; } > "$snapf" 2>/dev/null
+      fi
+    else
+      # #38 · one find, not one stat per file (see R4).
+      while IFS= read -r b; do
+        case "$b" in MEMORY.md|archive_index_*|"") continue;; esac
+        stale="$stale $b"
+      done < <(find "$MEM" -maxdepth 1 -name '*.md' -newer "$MEM/MEMORY.md" -printf '%f\n' 2>/dev/null | sort)
+      [ -n "$stale" ] && \
+        printf 'R7\tMEMORY.md older than the file(s) it indexes:%s\n' "$stale"
+      [ -n "$idx_m" ] && { printf '# index-mtime %s\n' "$idx_m"; printf '%s\n' "$cur"; } > "$snapf" 2>/dev/null
+    fi
   fi
 
   lap 'R9'
@@ -913,6 +955,16 @@ rot_checks() {
     [ "$sz" -gt "$MEMORY_MAX" ] && \
       printf 'R9\tMEMORY.md is %s bytes, past the %s-byte budget -- part of the index may already be silently dropped; compact it\n' \
         "$sz" "$MEMORY_MAX"
+    # 0.1.11 · The loader has a LINE limit too (the first 200 lines, or 25 KB,
+    # whichever comes first). Bytes alone missed it: an index of many short
+    # lines would be cut below the byte budget, without a word. Found when
+    # Middle-Earth's own pyramid turned out to cut its rule pages to their
+    # budget before delivering them, so a rule written there reached nobody
+    # (2026-11-06). Warned below the cap, while there is room to compact.
+    local ln; ln=$(grep -c '' "$MEM/MEMORY.md")
+    [ "$ln" -gt "${MINDFORGE_MEMORY_MAX_LINES:-180}" ] && \
+      printf 'R9\tMEMORY.md is %s lines, past the %s-line budget -- the loader reads only the first 200; compact it\n' \
+        "$ln" "${MINDFORGE_MEMORY_MAX_LINES:-180}"
   fi
 
   # R12 · a file that declares it is rewritten every session, and was not (#28)
@@ -951,9 +1003,21 @@ rot() {
   if [ -z "$found" ]; then
     printf '  %snothing rotting%s\n' "$G" "$O"; return 0
   fi
+  # Count the DISTINCT days each finding has appeared, by its key, not its text.
+  # The text carries numbers that move ("15 unpushed", then 17, then 18) and
+  # lists that change (R7's file names), so an exact-text count never reached
+  # three and the escalation never fired: R3 and R7 repeated for five sessions
+  # in plain yellow (found 2026-11-06). The key is the rule plus its subject,
+  # digits made neutral and a trailing ": list" dropped.
+  local days_by_key
+  days_by_key=$(awk -F'\t' '
+    function key(c, m) { sub(/: .*/, "", m); gsub(/[0-9]+/, "N", m); return c "\t" m }
+    { k = key($2, $3); if (!((k, $1) in seen)) { seen[k, $1] = 1; n[k]++ } }
+    END { for (k in n) print n[k] "\t" k }' "$log" 2>/dev/null)
   printf '%s\n' "$found" | while IFS=$'\t' read -r code msg; do
-    # count DISTINCT days this exact finding has appeared
-    local seen; seen=$(grep -F "	$code	$msg" "$log" 2>/dev/null | cut -f1 | sort -u | wc -l)
+    local k seen; k=$(printf '%s\t%s' "$code" "$msg" | awk -F'\t' '{ m = $2; sub(/: .*/, "", m); gsub(/[0-9]+/, "N", m); print $1 "\t" m }')
+    seen=$(awk -F'\t' -v c="${k%%$'\t'*}" -v m="${k#*$'\t'}" '$2 == c && $3 == m { print $1; exit }' <<<"$days_by_key")
+    seen=${seen:-0}
     if [ "$seen" -ge 3 ]; then
       printf '  %s%s  %s%s  %s(%s sessions -- fix it)%s\n' "$R" "$code" "$msg" "$O" "$R" "$seen" "$O"
     else
@@ -1259,6 +1323,21 @@ wrap_checks() {
         c_open "$(basename "$hf") is rewritten every session, and this one has not rewritten it"
       fi
     done < <(handoff_files)
+  fi
+  # 0.1.11 · the person's corrections this session (logged by `mindforge heard`)
+  # each want a cause logged with `mindforge drift`; fewer causes than
+  # corrections is open, so a correction cannot end a session unexplained.
+  if [ -n "$since" ] && [ -r "$STATE/drift.log" ]; then
+    local heardn causen
+    heardn=$(awk -F'\t' -v s="$since" '$1 >= s && $2 ~ /^heard \(/' "$STATE/drift.log" | grep -c .)
+    causen=$(awk -F'\t' -v s="$since" '$1 >= s && $2 !~ /^heard \(/' "$STATE/drift.log" | grep -c .)
+    if [ "$heardn" -gt 0 ]; then
+      if [ "$causen" -ge "$heardn" ]; then
+        c_ok "$heardn correction(s) from the person this session, each with a cause logged"
+      else
+        c_open "$heardn correction(s) from the person this session, $causen cause(s) logged -- for each, name what misled you and fix it there (mindforge drift \"...\")"
+      fi
+    fi
   fi
   [ -r "$STATE/wip.md" ] && c_info "in-flight note cleared by this wrap: $(cut -f2 "$STATE/wip.md")"
   return 0
@@ -1596,6 +1675,19 @@ try:
 except OSError:
     pass
 alert = f"tie alert: {tells}"
+# 0.1.11 · No hook can see a reply before it is shown; the Stop hook runs after
+# it is on screen. Blocking made the assistant write it AGAIN, so the person
+# read the same long reply twice (2026-11-06, minutes after an angry message).
+# Default now: note it, and `mindforge heard` (UserPromptSubmit) puts it in
+# front of the next reply. MINDFORGE_TONE=block brings the old rewrite back.
+if os.environ.get("MINDFORGE_TONE", "note") != "block":
+    try:
+        with open(os.path.join(state, "tone.pending"), "w", encoding="utf-8") as f:
+            f.write(tells + "\n")
+    except OSError:
+        pass
+    print(json.dumps({"systemMessage": alert + " (noted; the next reply is reminded)"}))
+    sys.exit(0)
 if hook.get("stop_hook_active"):
     print(json.dumps({"systemMessage": alert + " (second pass, letting it through)"}))
 else:
@@ -1616,6 +1708,240 @@ PY
   [ "$rc" -eq 3 ] && return 0     # blocked: no chime yet, the reply comes back
   chime                           # the reply went through: the person is waited on
   return 0
+}
+
+# ── heard · before each reply (0.1.11) ──────────────────────────────────────
+# A UserPromptSubmit hook: it runs when the person sends a message, BEFORE the
+# assistant writes a word -- the earliest moment a hook can act (no hook sees
+# a reply before it is shown). Two jobs:
+#  1. The turn note. The style rules sat at the top of a long context and lost
+#     to the app's own habits on long turns; the tone check could only catch
+#     the slip after the person had read it. A few lines from turn.local (or a
+#     plain default) go in front of every reply, plus the tells the last reply
+#     was caught with (tone.pending, written by `mindforge tone`).
+#  2. The correction catcher. When the person corrects the assistant ("I never
+#     asked", "we discussed this", "how many times"), the message is logged to
+#     drift.log and the assistant is told to find the agreement it broke and
+#     fix the SOURCE that misled it. drift.log had 5 entries in ten weeks while
+#     the misses kept coming: nothing wrote them down unless someone
+#     remembered to (2026-11-06).
+#   mindforge heard                (the hook; reads the hook's JSON on stdin)
+#   mindforge heard --check <text> say whether <text> reads as a correction
+#   ~/.config/mindforge/turn.local   the turn note, one line each (optional)
+#   ~/.config/mindforge/heard.local  extra correction patterns, one regex per line
+heard() {
+  local py
+  py=$(find_python) || exit 0   # never stand between the person and the reply
+  local mode="${1:-}" text="${2:-}" code
+  code=$(cat <<'PY'
+import json, os, re, sys, datetime
+mode, text, state, cfg, sid = sys.argv[1:6]
+PATTERNS = [
+    r"\bi never asked\b", r"\bnever asked for\b",
+    r"\bwe (already )?(discussed|talked about|agreed on|decided) (this|that)\b",
+    r"\bi (already )?told you\b", r"\bhow many times\b",
+    r"\bwhy (do |are )?you keep\b", r"\byou keep (doing|changing|missing|forgetting|asking|ignoring)\b",
+    r"\bstop (doing|using|with)\b", r"\b(infuriating|irritating|frustrat\w*|furious)\b",
+    r"\bnot what i (asked|said|wanted)\b", r"\byou (forgot|missed|ignored)\b",
+    r"\bnot following our\b", r"\bwe (don.t|do not) work (like|that way)\b", r"\bonce again\b",
+    r"\bmissing the mark\b", r"\bno more missing\b", r"\b(did not|didn.t) asked?\b",
+]
+local = os.path.join(cfg, "heard.local")
+if os.path.isfile(local):
+    for line in open(local, encoding="utf-8"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            PATTERNS.append(line)
+
+def correction(t):
+    for p in PATTERNS:
+        try:
+            m = re.search(p, t, flags=re.I)
+        except re.error:
+            continue
+        if m:
+            return m.group(0)
+    return None
+
+if mode == "--check":
+    hit = correction(text)
+    if hit:
+        print(hit)
+    sys.exit(0 if hit else 1)
+
+try:
+    hook = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+prompt = hook.get("prompt") or ""
+# what the app wraps around a message is not the person speaking
+prompt = re.sub(r"<system-reminder>.*?</system-reminder>", "", prompt, flags=re.S).strip()
+parts = []
+
+note = []
+tf = os.path.join(cfg, "turn.local")
+if os.path.isfile(tf):
+    note = [l.rstrip("\n") for l in open(tf, encoding="utf-8") if l.strip() and not l.startswith("#")]
+if not note:
+    note = ["Write this reply the way the person talks: sentences, no section headers, "
+            "no bold line used as a heading, no form labels."]
+parts.append("mindforge turn note: " + " ".join(note))
+
+pend = os.path.join(state, "tone.pending")
+if os.path.isfile(pend):
+    try:
+        tells = open(pend, encoding="utf-8").read().strip()
+        os.remove(pend)
+        if tells:
+            parts.append("Your last reply was caught with: " + tells + ". Do not repeat it.")
+    except OSError:
+        pass
+
+hit = correction(prompt) if prompt and not prompt.startswith("<") else None
+if hit:
+    excerpt = " ".join(prompt.split())[:200]
+    try:
+        with open(os.path.join(state, "drift.log"), "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M}\theard ({sid or 'no session'}): {excerpt}\n")
+    except OSError:
+        pass
+    # The reviewers (2026-11-07): mend the mistaken reading, never invent
+    # another agreement. The agreement usually exists already; what misled the
+    # assistant is a wrong copy or a paraphrase of it somewhere else.
+    parts.append(
+        f"mindforge: the person's message reads as a correction (\"{hit}\"). Before you reply: "
+        "find the agreement it is about, already written in the person's own words (L0, an L1 "
+        "rules file, a project CLAUDE.md), and quote it. Then find what misled you (a memory note, "
+        "a handoff, a tool's description, an add-on) and correct THAT so it agrees with the "
+        "written agreement. Do not write a new rule or a new note to cover it: the fix is to the "
+        "wrong copy. If no written agreement covers it, ask the person in plain words instead of "
+        "guessing one. Log the cause with: mindforge drift \"<what misled you>\". "
+        "If it is not a correction after all, carry on.")
+
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                         "additionalContext": "\n".join(parts)}}))
+PY
+)
+  $py -c "$code" "$mode" "$text" "$STATE" "$HOME/.config/mindforge" "${SID:-}"
+}
+
+# ── memcheck · a memory write, checked before it lands (0.1.11) ─────────────
+# mindForge's first rule (2026-08-29): memory is read only when something
+# brings it up, so RULES MUST NOT LIVE IN MEMORY; they live in the always-loaded
+# files (L0, the L1 rules files, a project's CLAUDE.md), in the person's words.
+# By 2026-11-06, 56 rules lived in memory, and a note written there ("use the
+# card for EVERY step he does", a paraphrase he never said) beat an agreement
+# months older. And a fact written as a plan ("buying it is his step",
+# 09-28) was relayed as true on 11-06, a day after it stopped being true.
+# Two checks, on the lines a write ADDS to a memory note:
+#  1. A note of type feedback names the file where its rule lives, with the
+#     rule's words as they stand there ("Rule lives in: <path> -- "<words>"",
+#     an existing L0 / L1 / CLAUDE.md file that holds those words). The note
+#     keeps the story; the rule is written there. A home that does not hold the
+#     words (missing, or another rule) is refused: pointing is not enough.
+#  2. A line that says something is still to happen ("not bought yet", "is his
+#     step", "waiting on him") carries the date it was true.
+# Called by an add-on's tool hook with the write as JSON on stdin:
+#   {"tool": "Write"|"Edit", "file_path": .., "content": .., "old_string": .., "new_string": .., "replace_all": ..}
+# Exit 0: fine (or not a memory note). Exit 1: refused, the reason on stdout.
+# Exit 2: could not look (said on stdout; the caller lets the write through).
+memcheck() {
+  case "${1:-}" in "") ;; -*) bad_option memcheck "$1" ;; esac
+  local py; py=$(find_python) || { echo "mindforge memcheck: no python that runs -- not checked"; return 2; }
+  local code
+  code=$(cat <<'PY'
+import json, os, re, sys
+mem, home = sys.argv[1:3]
+try:
+    w = json.load(sys.stdin)
+except ValueError:
+    print("mindforge memcheck: the write could not be read -- not checked"); sys.exit(2)
+path = w.get("file_path") or ""
+def real(p):
+    return os.path.realpath(os.path.expanduser(p))
+if not path or not mem or os.path.dirname(real(path)) != real(mem):
+    sys.exit(0)
+name = os.path.basename(path)
+if not name.endswith(".md") or name == "MEMORY.md" or name.startswith("archive_"):
+    sys.exit(0)
+old = ""
+if os.path.isfile(path):
+    try:
+        old = open(path, encoding="utf-8").read()
+    except OSError:
+        print("mindforge memcheck: the note could not be read -- not checked"); sys.exit(2)
+if w.get("tool") == "Edit":
+    o, n = w.get("old_string") or "", w.get("new_string") or ""
+    if o and o in old:
+        new = old.replace(o, n) if w.get("replace_all") else old.replace(o, n, 1)
+    else:
+        sys.exit(0)   # the edit will fail on its own
+else:
+    new = w.get("content") or ""
+added = [l for l in new.splitlines() if l.strip() and l not in set(old.splitlines())]
+problems = []
+
+m = re.search(r"^\s*type:\s*(\w+)", new, re.M)
+if m and m.group(1) == "feedback":
+    # A path with a space in it (a synced folder) goes in backticks.
+    home_line = re.search(r"^[*_\s-]*rule lives in:?[*_]*\s*(?:`([^`\n]+)`|(\S+))", new, re.M | re.I)
+    home_name = (home_line.group(1) or home_line.group(2)) if home_line else ""
+    target = real(home_name) if home_line else ""
+    claude = os.path.join(home, ".claude")
+    ok_home = bool(target) and os.path.isfile(target) and (
+        target == real(os.path.join(claude, "CLAUDE.md"))
+        or os.path.dirname(target) == real(os.path.join(claude, "rules"))
+        or os.path.basename(target) == "CLAUDE.md")
+    words = ""
+    if home_line:
+        q = re.search(r'["\u201c]([^"\u201d]{8,})["\u201d]', home_line.group(0) + new[home_line.end():].split("\n", 1)[0])
+        words = q.group(1) if q else ""
+    def norm(t):
+        return re.sub(r"\s+", " ", re.sub(r"[*_`]", "", t)).strip().lower()
+    if ok_home and not words:
+        problems.append(
+            "the line \"Rule lives in: " + home_name + "\" must also carry the rule's own words, in "
+            "quotes, as they stand in that file, so the rule can be found there "
+            "(Rule lives in: <file> -- \"<the rule's words>\").")
+    elif ok_home:
+        try:
+            body = open(target, encoding="utf-8").read()
+        except OSError:
+            body = ""
+        if norm(words) not in norm(body):
+            problems.append(
+                "the rule's words \"" + words[:80] + "\" are not in " + home_name + ". Write the rule "
+                "there first (the person's words, with the date; the agreement needs the person's yes), "
+                "then point to it.")
+    if not ok_home:
+        problems.append(
+            "this is a rule (type: feedback), and rules do not live in memory: memory is only read "
+            "when something brings it up. Write the rule, in the person's own words and with the date, "
+            "in the file that owns it (~/.claude/CLAUDE.md for everything -- that one needs the "
+            "person's yes --, a ~/.claude/rules/ file for one area, or the project's CLAUDE.md), and "
+            "keep here only the story of why, with the line: Rule lives in: <that file> -- \"<the rule's words>\"."
+            + (f" The line names {home_name}, which is not such a file." if home_line else ""))
+
+PENDING = re.compile(r"\bnot (yet )?(bought|live|created|registered|done|pushed|released|made|set up)\b"
+                     r"|\b(isn.t|is not|aren.t|are not) (live|bought|created|registered|made) yet\b"
+                     r"|\bis (his|her|their|\w+.s) (step|call|job)\b"
+                     r"|\bwait(s|ing)? on (him|her|them|the maintainer|(?-i:[A-Z])\w+)\b", re.I)
+DATED = re.compile(r"\b20\d\d-\d\d-\d\d\b|\b\d\d-\d\d\b|\bas of\b|\bchecked\b", re.I)
+undated = [l.strip()[:90] for l in added if PENDING.search(l) and not DATED.search(l)]
+if undated:
+    problems.append(
+        "a line says something is still to happen, with no date: \"" + undated[0] + "\". "
+        "Such a line stops being true without anyone noticing (\"buying it is his step\" was relayed "
+        "a day after it was bought). Add the date it was true, and how you know (\"as of 2026-11-07, "
+        "checked in ...\"); check it first if you can.")
+
+if problems:
+    print("mindforge memcheck refused " + name + ": " + " Also: ".join(problems))
+    sys.exit(1)
+sys.exit(0)
+PY
+)
+  $py -c "$code" "$MEM" "$HOME"
 }
 
 # ── chime · a sound when the assistant is done and waiting (0.1.7) ───────────
@@ -2065,6 +2391,10 @@ usage:
   mindforge log [--drop-last]            recent rows / remove the last (backup kept)
   mindforge rot                          the silent-failure checks
   mindforge tone [--check <file>]        the tie alert (a Stop hook; --check reads a file)
+  mindforge heard [--check "<text>"]     before each reply: the turn note + the correction catcher
+                                         (a UserPromptSubmit hook; --check tests one message)
+  mindforge memcheck                     a memory write (JSON on stdin) checked before it lands: no rule
+                                         without its home file, no "not yet" without a date (an add-on calls it)
   mindforge active [--show|--clear|<path>]  the active project's banner (a SessionStart hook; <path> switches and shows it);
                                          wrap moves it to the project the focus names
   mindforge chime [--test]               a sound when the assistant is done and waiting
@@ -2105,6 +2435,8 @@ case "${1:-brief}" in
                  [ -n "${MF_TIMINGS:-}" ] && printf 'timing\t%-9s %6d ms\n' "total" $(( $(now_ms) - t_all )) >&2
                  true ;;
   tone)          shift; tone "$@" ;;
+  heard)         shift; heard "$@" ;;
+  memcheck)      shift; memcheck "$@" ;;
   chime)         shift; chime "$@" ;;
   active)        shift; active "$@" ;;
   hooks)         shift; hooks_cmd "$@" ;;

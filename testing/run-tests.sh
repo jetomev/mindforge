@@ -66,6 +66,7 @@ mf() {
     MINDFORGE_STATE="$SB/state" MINDFORGE_PROJECTS="${SB_PROJECTS:-$SB/projects}" \
     MINDFORGE_MEMORY="${SB_MEM-$SB/mem}" CLAUDE_CODE_SESSION_ID="$SID" \
     SB_GH_STATE="${SB_GH_STATE:-}" SB_GH_SLEEP="${SB_GH_SLEEP:-}" MINDFORGE_VAULT="${SB_VAULT:-}" \
+    ${MINDFORGE_TONE:+MINDFORGE_TONE="$MINDFORGE_TONE"} \
     ${COLUMNS:+COLUMNS="$COLUMNS"} \
     MINDFORGE_CHIME="${MINDFORGE_CHIME:-/nonexistent-chime}" MINDFORGE_CHIME_PLAYER="${MINDFORGE_CHIME_PLAYER:-}" \
     bash "$MF" "$@"
@@ -88,6 +89,11 @@ commit_unpushed() {
 
 # Fingerprint of a directory tree: every file's path and content hash.
 snap() { ( cd "$1" 2>/dev/null && find . -type f -exec md5sum {} + | sort ) ; }
+# The real state folder is shared: the app's add-ons (status-strip, session-lights)
+# write their own cards into it every minute, so a run of a few minutes always saw
+# it "change" and failed isolation for no fault of mindForge's (found 2026-11-07,
+# true since the add-ons arrived on 2026-10-29). Their folders are theirs, not ours.
+snap_real() { ( cd "$1" 2>/dev/null && find . -type f -not -path './status-strip/*' -not -path './session-lights/*' -exec md5sum {} + | sort ) ; }
 rows() { grep -vc '^#' "$SB/state/sessions.log"; }
 
 # ---------------------------------------------------------------- asserting --
@@ -161,7 +167,7 @@ FAIL=0; RAN=0; FAILED=()
 # Where the real state lives, read the same way mindforge reads it.
 REAL_STATE=$( [ -r "$HOME/.config/mindforge/config" ] && . "$HOME/.config/mindforge/config"
               printf '%s' "${MINDFORGE_STATE:-$HOME/.claude/state}" )
-REAL_BEFORE=$(snap "$REAL_STATE")
+REAL_BEFORE=$(snap_real "$REAL_STATE")
 
 # =================================================================== checks ==
 
@@ -447,6 +453,28 @@ if begin "rot: present and fine stays quiet"; then
   end
 fi
 
+# 0.1.11 · three strikes by key, not text: a finding whose number moves daily
+# ("15 unpushed", then 17, then 18) never counted as the same finding, so the
+# escalation never fired (R3 and R7 for five sessions, 2026-11-06).
+if begin "rot: escalates by key when the count moves"; then
+  make_repo alpha; commit_unpushed alpha; seq 10 > "$SB/home/.claude/CLAUDE.md"; : > "$SB/mem/MEMORY.md"; hooks_json
+  printf '2026-01-01\tR3\talpha has 3 unpushed commit(s)\n2026-01-02\tR3\talpha has 4 unpushed commit(s)\n' > "$SB/state/rot.log"
+  out=$(mf rot)
+  check "third day with a new count turns red"  grep -q 'R3.*alpha has 1 unpushed.*3 sessions -- fix it' <<<"$out"
+  printf '2026-01-01\tR3\tbeta has 3 unpushed commit(s)\n2026-01-02\tR3\tbeta has 4 unpushed commit(s)\n' > "$SB/state/rot.log"
+  out=$(mf rot)
+  check "another repo's history does not count" bash -c '! grep -q "sessions -- fix it" <<<"$1"' _ "$out"
+  printf '2026-01-01\tR7\tMEMORY.md older than the file(s) it indexes: a.md\n2026-01-02\tR7\tMEMORY.md older than the file(s) it indexes: b.md c.md\n' > "$SB/state/rot.log"
+  rm -f "$SB/state/memory-summaries.snap"   # no baseline: the first-run proxy speaks
+  : > "$SB/mem/MEMORY.md"; touch -d '2 days ago' "$SB/mem/MEMORY.md"; printf -- '---\nname: d\n---\n' > "$SB/mem/d.md"
+  printf -- '- [d](d.md)\n' > "$SB/mem/MEMORY.md.tmp"; cat "$SB/mem/MEMORY.md.tmp" > "$SB/mem/MEMORY.md"; rm "$SB/mem/MEMORY.md.tmp"
+  touch -d '2 days ago' "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "a changing file list keeps one key"    grep -q 'R7.*3 sessions -- fix it' <<<"$out"
+  end
+fi
+
+
 # #24: the scrub guard proves its tool works, and a partial scan says partial.
 HOOK="${MINDFORGE_HOOK_UNDER_TEST:-$ROOT/.githooks/pre-commit}"
 hook_repo() {
@@ -651,6 +679,40 @@ if begin "rot"; then
   end
 fi
 
+# 0.1.11 · R9 counts lines too: the loader reads the first 200 lines or 25 KB.
+if begin "rot: R9 by lines"; then
+  seq 10 > "$SB/home/.claude/CLAUDE.md"; hooks_json
+  for i in $(seq 1 190); do printf -- '- [m%s](m%s.md) — x\n' "$i" "$i"; done > "$SB/mem/MEMORY.md"
+  for i in $(seq 1 190); do : > "$SB/mem/m$i.md"; done; touch "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "190 short lines, under the byte budget: named" grep -q 'R9.*190 lines, past the 180-line budget' <<<"$out"
+  check "setup: the bytes alone were fine"       bash -c '! grep -q "bytes, past" <<<"$1"' _ "$out"
+  end
+fi
+
+# 0.1.11 · R7 compares summaries, not save times. Body edits were 51 days of
+# noise; a changed `description:` is what makes an index line wrong.
+if begin "rot: R7 by summary"; then
+  printf -- '---\nname: a\ndescription: the old summary\n---\nbody\n' > "$SB/mem/a.md"
+  printf -- '- [a](a.md) — the old summary\n' > "$SB/mem/MEMORY.md"
+  touch -d '1 hour ago' "$SB/mem/MEMORY.md"; touch -d '2 hours ago' "$SB/mem/a.md"
+  out=$(mf rot)
+  check "baseline run: nothing stale"            bash -c '! grep -q "R7" <<<"$1"' _ "$out"
+  check "the baseline is written"                grep -q '^a.md	the old summary' "$SB/state/memory-summaries.snap"
+  printf 'more body\n' >> "$SB/mem/a.md"
+  out=$(mf rot)
+  check "a detail change is still caught"        grep -q 'R7.*details changed under an unchanged summary.*a.md' <<<"$out"
+  check "and not called a summary change"        bash -c '! grep -q "the summary changed" <<<"$1"' _ "$out"
+  sed -i 's/the old summary/a NEW summary/' "$SB/mem/a.md"
+  out=$(mf rot)
+  check "a changed summary is named"             grep -q 'R7.*the summary changed.*a.md' <<<"$out"
+  check "once, not on both lines"                bash -c '! grep -q "details changed.*a.md" <<<"$1"' _ "$out"
+  printf -- '- [a](a.md) — a NEW summary\n' > "$SB/mem/MEMORY.md"
+  out=$(mf rot)
+  check "rewriting the index clears it"          bash -c '! grep -q "R7" <<<"$1"' _ "$out"
+  end
+fi
+
 # #39 · R11: recent work the queue does not name. Failing direction first --
 # the missing repo MUST be named -- then every deliberate way out stays quiet.
 old_commit() {   # old_commit <repo>: its only commit moved back to 2020
@@ -818,6 +880,7 @@ if begin "tone --check"; then
 fi
 
 if begin "tone as the Stop hook"; then
+  export MINDFORGE_TONE=block   # the 0.1.7 rewrite, kept behind a switch since 0.1.11
   fake_transcript "$SB/t.jsonl" "Here's where it all stands. **Staged and verified**"
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
   check "first pass blocks the reply"            grep -q '"decision": *"block"' <<<"$out"
@@ -840,6 +903,52 @@ if begin "tone as the Stop hook"; then
   fake_transcript "$SB/l.jsonl" "hell yeah it worked"
   out=$(hook_json "$SB/l.jsonl" | mf tone)
   check "a local pattern is honoured"            grep -q 'a local pattern' <<<"$out"
+  unset MINDFORGE_TONE
+  end
+fi
+
+# 0.1.11 · the default no longer forces a second reply: it notes the tells for
+# `heard` to put in front of the next one.
+if begin "tone notes instead of blocking"; then
+  fake_transcript "$SB/t.jsonl" "Here's where it all stands. **Staged and verified**"
+  out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
+  check "no block by default"                    bash -c '! grep -q block <<<"$1"' _ "$out"
+  check "the person still sees the alert"        grep -q '"systemMessage": *"tie alert.*noted' <<<"$out"
+  check "the tells wait for the next turn"       grep -q 'status-report opener' "$SB/state/tone.pending"
+  check "still logged"                           grep -q 'status-report opener' "$SB/state/tone.log"
+  end
+fi
+
+# 0.1.11 · heard: the turn note and the correction catcher (UserPromptSubmit).
+prompt_json() { "$PY" -c 'import json,sys; print(json.dumps({"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":sys.argv[1]}))' "$1"; }
+if begin "heard: before each reply"; then
+  out=$(prompt_json "ok, next one please" | mf heard); rc=$?
+  check "a plain message: the turn note only"    cond 'grep -q "turn note" <<<"$out" && ! grep -q correction <<<"$out"'
+  check "it is UserPromptSubmit context"         grep -q '"hookEventName": *"UserPromptSubmit"' <<<"$out"
+  check "exit 0"                                 [ "$rc" -eq 0 ]
+  check "nothing logged for a plain message"     [ ! -s "$SB/state/drift.log" ]
+  out=$(prompt_json "these cards are horrible. I never asked for them. why you keep changing the way we work?" | mf heard)
+  check "a correction is named"                  grep -q 'reads as a correction' <<<"$out"
+  check "and told to correct what misled it"     grep -q 'correct THAT' <<<"$out"
+  check "never to invent a new rule"             grep -q 'Do not write a new rule' <<<"$out"
+  check "and logged to drift.log"                grep -q 'heard (.*I never asked' "$SB/state/drift.log"
+  printf 'a bold line used as a heading\n' > "$SB/state/tone.pending"
+  out=$(prompt_json "go on" | mf heard)
+  check "last reply's tells come forward"        grep -q 'last reply was caught with: a bold line' <<<"$out"
+  check "and are used once"                      [ ! -e "$SB/state/tone.pending" ]
+  mkdir -p "$SB/home/.config/mindforge"; printf 'Steps he does: intro, numbered steps, what he sees.\n' > "$SB/home/.config/mindforge/turn.local"
+  out=$(prompt_json "go on" | mf heard)
+  check "turn.local replaces the default note"   grep -q 'Steps he does' <<<"$out"
+  out=$(prompt_json "<system-reminder>I never asked</system-reminder>go on" | mf heard)
+  check "app wrapping is not the person"         bash -c '! grep -q correction <<<"$1"' _ "$out"
+  mf heard --check "how many times do I have to say this" >/dev/null; rc=$?
+  check "--check: a correction exits 0"          [ "$rc" -eq 0 ]
+  mf heard --check "coming along with new things I did not asked ever" >/dev/null; rc=$?
+  check "--check: his 11-06 wording is caught"   [ "$rc" -eq 0 ]
+  mf heard --check "try the next build" >/dev/null; rc=$?
+  check "--check: plain text exits 1"            [ "$rc" -eq 1 ]
+  out=$(printf 'not json' | mf heard); rc=$?
+  check "bad input: silence, exit 0"             cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   end
 fi
 
@@ -848,6 +957,7 @@ fi
 # fails when run. Staged here with a stub that does exactly that, in front of
 # a `python` that works; then with nothing that works at all.
 if begin "tone finds a python that runs"; then
+  export MINDFORGE_TONE=block
   REAL_PY=$(command -v "$PY")
   printf '#!/usr/bin/env bash\necho "Python was not found; run without arguments to install from the Microsoft Store" >&2\nexit 9009\n' > "$SB/bin/python3"
   printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$REAL_PY" > "$SB/bin/python"
@@ -866,6 +976,53 @@ if begin "tone finds a python that runs"; then
   check "no python that runs: --check is silent, exit 0" cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
   out=$(hook_json "$SB/t.jsonl" | mf tone); rc=$?
   check "no python that runs: the hook never blocks"    cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
+  unset MINDFORGE_TONE
+  end
+fi
+
+# 0.1.11 · memcheck: the two real failures of 2026-11-06, replayed. Each must be
+# refused; then the right way to write the same thing must pass.
+write_json() { "$PY" -c 'import json,sys; t,f,c=sys.argv[1:4]; print(json.dumps({"tool":t,"file_path":f,"content":c}))' "$@"; }
+edit_json()  { "$PY" -c 'import json,sys; f,o,n=sys.argv[1:4]; print(json.dumps({"tool":"Edit","file_path":f,"old_string":o,"new_string":n}))' "$@"; }
+if begin "memcheck: the night's failures are refused"; then
+  mkdir -p "$SB/home/.claude/rules"; echo "the agreement" > "$SB/home/.claude/CLAUDE.md"; echo "release rules" > "$SB/home/.claude/rules/release.md"
+  card=$'---\nname: mods\ntype: feedback\n---\nyour-turn card: use it for EVERY step he does.\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$card" | mf memcheck); rc=$?
+  check "the 10-29 card rule, written to memory: refused" cond '[ "$rc" -eq 1 ] && grep -q "rules do not live in memory" <<<"$out"'
+  printf 'the agreement\n- No buttons, not weird boxes (2026-11-06).\n' > "$SB/home/.claude/CLAUDE.md"
+  good=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$' -- "No buttons, not weird boxes"\nWhy: he said "please stop with this" (2026-11-06).\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$good" | mf memcheck); rc=$?
+  check "the note pointing at its home, the rule there: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  mkdir -p "$SB/home/Google Drive/book"; printf 'Venues are fluid, the docs are the spine.\n' > "$SB/home/Google Drive/book/CLAUDE.md"
+  spaced=$'---\nname: mods\ntype: feedback\n---\nRule lives in: `'"$SB/home/Google Drive/book/CLAUDE.md"$'` -- "Venues are fluid"\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$spaced" | mf memcheck); rc=$?
+  check "a home path with a space, in backticks: passes" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  nowords=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$'\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$nowords" | mf memcheck); rc=$?
+  check "a home named without the rule's words: refused" cond '[ "$rc" -eq 1 ] && grep -q "must also carry the rule" <<<"$out"'
+  missing=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/rules/release.md"$' -- "No buttons, not weird boxes"\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$missing" | mf memcheck); rc=$?
+  check "a home that does not hold the rule (missing): refused" cond '[ "$rc" -eq 1 ] && grep -q "are not in" <<<"$out"'
+  wrong=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/home/.claude/CLAUDE.md"$' -- "use the card for every step he does"\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$wrong" | mf memcheck); rc=$?
+  check "a home holding another rule (wrong words): refused" cond '[ "$rc" -eq 1 ] && grep -q "are not in" <<<"$out"'
+  bad=$'---\nname: mods\ntype: feedback\n---\nRule lives in: '"$SB/mem/other.md"$'\n'
+  out=$(write_json Write "$SB/mem/feedback_card.md" "$bad" | mf memcheck); rc=$?
+  check "a 'home' that is another memory note: refused" cond '[ "$rc" -eq 1 ] && grep -q "is not such a file" <<<"$out"'
+  printf -- '---\nname: co\ntype: project\n---\n- Domains: free on 2026-09-28.\n' > "$SB/mem/project_co.md"
+  out=$(edit_json "$SB/mem/project_co.md" "- Domains: free on 2026-09-28." $'- Domains: free on 2026-09-28.\n- The site isn\'t live yet; buying the domain is his step.' | mf memcheck); rc=$?
+  check "the 09-28 domain line, undated: refused" cond '[ "$rc" -eq 1 ] && grep -q "no date" <<<"$out"'
+  out=$(edit_json "$SB/mem/project_co.md" "- Domains: free on 2026-09-28." $'- Domains: free on 2026-09-28.\n- As of 2026-11-07 (checked in the registry): the domain is registered; the site is not live yet.' | mf memcheck); rc=$?
+  check "the same fact with its date: passes"     cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  printf -- '---\nname: old\ntype: project\n---\n- waiting on him for the bank\n' > "$SB/mem/project_old.md"
+  out=$(edit_json "$SB/mem/project_old.md" "name: old" "name: old2" | mf memcheck); rc=$?
+  check "an old undated line the write leaves alone: not its business" [ "$rc" -eq 0 ]
+  out=$(write_json Write "$SB/elsewhere.md" "$card" | mf memcheck); rc=$?
+  check "a file outside memory: not checked"      cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'
+  out=$(write_json Write "$SB/mem/MEMORY.md" "- [x](x.md) — not live yet" | mf memcheck); rc=$?
+  check "the index itself: not checked here"      [ "$rc" -eq 0 ]
+  out=$(printf 'not json' | mf memcheck); rc=$?
+  check "unreadable input: could not look (2), said" cond '[ "$rc" -eq 2 ] && grep -q "not checked" <<<"$out"'
   end
 fi
 
@@ -1076,6 +1233,7 @@ fi
 # #65 (W-14, item 2) · A transcript path in Git Bash's spelling reaches a Windows
 # python that cannot open it. Staged with a cygpath stub that knows the way.
 if begin "tone: a Git Bash transcript path (#65)"; then
+  export MINDFORGE_TONE=block
   fake_transcript "$SB/t.jsonl" "Here's where it all stands."
   printf '#!/usr/bin/env bash\n[ "$1" = -m ] && [ "$2" = /msys/t.jsonl ] && { echo "%s/t.jsonl"; exit 0; }\nexit 1\n' "$SB" > "$SB/bin/cygpath"
   chmod +x "$SB/bin/cygpath"
@@ -1084,6 +1242,7 @@ if begin "tone: a Git Bash transcript path (#65)"; then
   rm "$SB/bin/cygpath"
   out=$(hook_json "/msys/t.jsonl" | mf tone); rc=$?
   check "setup: without cygpath the same path is silent" cond '[ -z "$out" ] && [ "$rc" -eq 0 ]'
+  unset MINDFORGE_TONE
   end
 fi
 
@@ -1134,6 +1293,8 @@ if begin "R12: the every-session file (#28)"; then
   printf '%s\t10:00\t12:00\twork\tb\twrapped\n' "$y" >> "$SB/state/sessions.log"
   touch -d "$y 09:00" "$SB/mem/plan.md"; touch -d "$y 09:00" "$SB/mem/MEMORY.md"
   out=$(mf rot)
+  printf -- '---\nrewritten_by: session\n---\nold plan\n' > "$SB/mem/archive_index_plan_20260101.md"; touch -d '2026-01-01' "$SB/mem/archive_index_plan_20260101.md"
+  check "an archived copy is never flagged" bash -c '! grep -q "R12.*archive_index" <<<"$1"' _ "$(mf rot)"
   check "written before the last session began: R12" grep -q 'R12.*plan.md is rewritten every session, but was last written .* before the last session began' <<<"$out"
   touch -d "$y 11:00" "$SB/mem/plan.md" "$SB/mem/MEMORY.md"
   check "rewritten during it: quiet"           bash -c '! grep -q R12 <<<"$1"' _ "$(mf rot)"
@@ -1215,7 +1376,7 @@ if begin "hazards (#25)"; then
 fi
 
 # ================================================================== verdict ==
-REAL_AFTER=$(snap "$REAL_STATE")
+REAL_AFTER=$(snap_real "$REAL_STATE")
 echo
 if [ "$REAL_BEFORE" != "$REAL_AFTER" ]; then
   echo "ISOLATION BROKEN: the real state at $REAL_STATE changed during the run" >&2
