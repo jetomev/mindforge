@@ -1056,6 +1056,10 @@ if begin "memcheck --shell"; then
   fromdir "from inside, sed -i on a bare name: refused"    "sed -i s/a/b/ a.md"      "$memdir" 1
   fromdir "from inside, rm of a bare name: refused"        "rm a.md"                 "$memdir" 1
   fromdir "from inside, reading a bare name: allowed"      "cat a.md"                "$memdir" 0
+  fromdir "from inside, patch: refused"                    "patch -p0 < x.patch"     "$memdir" 1
+  fromdir "from inside, git apply: refused"                "git apply /tmp/x.patch"  "$memdir" 1
+  fromdir "awk in place on a note: refused"                "awk -i inplace 1 ~/$MP/a.md" "$SB" 1
+  fromdir "from elsewhere, git apply: allowed"             "git apply /tmp/x.patch"  "$SB" 0
   fromdir "from elsewhere, the same bare name: allowed"    "echo hi > a.md"          "$SB"     0
   fromdir "cd out of the folder, then write: allowed"      "cd /tmp && echo hi > a.md" "$memdir" 0
   printf 'echo x > ~/%s/a.md\n' "$MP" > "$SB/w.sh"; chmod +x "$SB/w.sh"

@@ -1965,6 +1965,14 @@ def shell_change(cmd, cwd="", depth=0):
             return "sed -i on a memory file"
         if verb == "perl" and any(t.startswith("-") and "i" in t for t in toks[1:]) and any(is_mem(a) for a in args):
             return "perl -i on a memory file"
+        if verb == "patch" and (in_mem or any(is_mem(a) for a in args)):
+            return "patch on a memory file"
+        if verb == "git" and len(args) and args[0] in ("apply", "checkout", "restore") and (in_mem or any(is_mem(a) for a in args)):
+            return "git " + args[0] + " on a memory file"
+        if verb in ("ed", "ex") and any(is_mem(a) for a in args):
+            return verb + " on a memory file"
+        if verb in ("awk", "gawk") and "inplace" in toks and any(is_mem(a) for a in args):
+            return "awk in place on a memory file"
         if verb == "tee" and any(is_mem(a) for a in args):
             return "tee into a memory file"
         if verb in ("rm", "mv", "truncate", "touch", "shred", "unlink") and any(is_mem(a) for a in args):
