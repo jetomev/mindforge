@@ -305,6 +305,8 @@ that is the wrong rule. The shape:
 > When the person corrects the assistant, the fix is to the copy that misled it,
 > never a new rule (`mindforge heard`).
 
+**What the guard cannot see.** It reads the command and any script it runs, and a check that breaks stops the change, but reading a command can never catch three things: a path put together while a program runs, a compiled program that writes to memory, and a script more than one level down. Closing those would take locking the folder at the file level, which nobody has asked for.
+
 Two more lessons from the same night:
 
 - **A rule must arrive whole.** A second rule system cut each page to its size
