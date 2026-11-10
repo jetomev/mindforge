@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Unreleased
+
+- 📦 **`docs/PACKAGING.md` names `heard` and `memcheck` as python users.** 0.1.11 added both without listing them, against this repo's own rule (a new program use goes in the same commit). Found while bumping the AUR recipe, whose optdepend now says so.
+
 ## v0.1.11 — 2026-11-09
 
 **The brain, part 1: agreements that are not missed.** v0.1.10 had 293 checks; this release has 382, all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0 (no linter in this repo; nothing new).

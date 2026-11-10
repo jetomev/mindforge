@@ -19,7 +19,7 @@ aren't listed.*
 |---|---|---|
 | github-cli | issues and the repo watch (gh) | (program gh) |
 | libnotify | desktop messages | (program notify-send) |
-| python | the tie alert, `mindforge tone` (it tries python3, python, `py -3`) | (program python3) |
+| python | the tie alert, `mindforge tone`, `mindforge heard`, `mindforge memcheck` (it tries python3, python, `py -3`). Without one, `heard` stays silent and `memcheck` answers *could not look* (exit 2), which its caller treats as a stop | (program python3) |
 | libpulse or pipewire | the chime (paplay or pw-play; it tries five players) | (programs) |
 
 ## Needed to run the tests (`checkdepends`)
@@ -36,6 +36,8 @@ aren't listed.*
 | PowerShell 7 | `bin/mindforge.ps1`, the PowerShell wrapper (#21) |
 
 ## The AUR recipe
+
+0.1.11-1: no new programs, but the python optdepend now names `heard` and `memcheck` too (0.1.11 added both without listing them here; found while bumping the recipe).
 
 0.1.10-1: also installs `scope.example` with the other starting files (#23). No new programs: the vault scrub and the project brief use grep, awk, sed, paste and find.
 
