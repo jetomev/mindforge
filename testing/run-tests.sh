@@ -1070,6 +1070,8 @@ if begin "memcheck --shell"; then
   fromdir "a script that runs a script: refused"           "$SB/outer.sh"            "$SB" 1
   fromdir "a saved script that only reads: allowed"        "$SB/r.sh"                "$SB" 0
   fromdir "a script with nothing about memory: allowed"    "$SB/plain.sh"            "$SB" 0
+  printf '\177ELF\0\0\0 binary\n' > "$SB/prog"; chmod +x "$SB/prog"
+  fromdir "a compiled program run by path: allowed"        "$SB/prog"                "$SB" 0
   out=$(printf 'not json' | mf memcheck --shell); rc=$?
   check "unreadable input: could not look (2)" cond '[ "$rc" -eq 2 ] && grep -q "not checked" <<<"$out"'
   end

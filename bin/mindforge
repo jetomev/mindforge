@@ -1911,7 +1911,7 @@ def script_of(toks, here):
         found = shutil.which(toks[0])
         if found and expand(found).startswith(expand(home) + "/"):
             path = found
-    if not path or "$" in path:
+    if not path or "$" in path or "\0" in path:
         return None
     path = expand(path if path.startswith(("/", "~")) else os.path.join(here, path))
     if not os.path.isfile(path) or path.endswith("/bin/mindforge"):   # mindForge reads memory, never writes it
@@ -1999,9 +1999,13 @@ def script_change(cmd, cwd, depth):
         try:
             if os.path.getsize(path) > 2_000_000:
                 continue
-            text = open(path, encoding="utf-8", errors="replace").read()
+            with open(path, "rb") as f:
+                raw = f.read()
         except OSError:
             continue
+        if b"\0" in raw[:8192]:
+            continue                                 # a compiled program, not a script
+        text = raw.decode("utf-8", errors="replace")
         hit = shell_change(text, os.path.dirname(path), depth + 1)
         if hit:
             return "the script " + os.path.basename(path) + ": " + hit
