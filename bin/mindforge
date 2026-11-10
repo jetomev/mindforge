@@ -1844,7 +1844,7 @@ PY
 # Called by an add-on's tool hook with the write as JSON on stdin:
 #   {"tool": "Write"|"Edit", "file_path": .., "content": .., "old_string": .., "new_string": .., "replace_all": ..}
 # Exit 0: fine (or not a memory note). Exit 1: refused, the reason on stdout.
-# Exit 2: could not look (said on stdout; the caller lets the write through).
+# Exit 2: could not look (said on stdout; the caller stops the write).
 memcheck() {
   case "${1:-}" in "") ;; -*) bad_option memcheck "$1" ;; esac
   local py; py=$(find_python) || { echo "mindforge memcheck: no python that runs -- not checked"; return 2; }
