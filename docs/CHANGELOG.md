@@ -2,8 +2,12 @@
 
 Newest first.
 
-## Unreleased
+## v0.1.12 — 2026-11-09
 
+**A hotfix from the maintainer's test of 0.1.11, the same evening.** 388 checks (was 382), all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0. 0.1.11 never reaches the AUR; 0.1.12-1 is the one push, after its own test.
+
+- 🧵 **A style slip reaches only its own session (F-1, #75).** `tone` wrote every slip to one shared file, and `heard` handed it to whichever session spoke next: a brand-new session's first message came with another session's "your last reply was caught". Now one file per session; `heard` reads only its own, clears the shared file of 0.1.11 unread, and clears any session's file left for two days. 6 checks, the shared-file case seen failing on the 0.1.11 build.
+- 🧪 **`scripts/test-installed.sh`** runs part A's command steps of the test matrix against the installed `/usr/bin/mindforge` and logs what each printed.
 - 📦 **`docs/PACKAGING.md` names `heard` and `memcheck` as python users.** 0.1.11 added both without listing them, against this repo's own rule (a new program use goes in the same commit). Found while bumping the AUR recipe, whose optdepend now says so.
 
 ## v0.1.11 — 2026-11-09

@@ -1,7 +1,7 @@
 # mindForge — the list
 
-**Current release: v0.1.11** (9 Nov 2026) — the brain, part 1 (#68–#74). GitHub first; **AUR waits for the maintainer's local install test**, then one push. Before it: **v0.1.10** (19 Oct 2026), AUR 0.1.10-1 (`968bcd9`).
-**Tests:** `bash testing/run-tests.sh`, 382 checks, all passing, 1 could not look on Linux (9 Nov 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
+**Current release: v0.1.12** (9 Nov 2026) — hotfix F-1 (#75) from the maintainer's test of **v0.1.11** (the brain, part 1, #68–#74, same evening). GitHub first; **AUR: 0.1.12-1 waits for his test** (0.1.11-1 is never pushed). Before: v0.1.10 (19 Oct 2026), AUR 0.1.10-1 (`968bcd9`).
+**Tests:** `bash testing/run-tests.sh`, 388 checks, all passing, 1 could not look on Linux (9 Nov 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit. **His test of the installed package:** `bash scripts/test-installed.sh`.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -49,13 +49,15 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **His yes** (11-09, typed here: "All plan is good. go!")
 - [x] **Switched on** (11-09 20:07): session-lights 0.3.0 installed (backup kept), his style note in place
 - [x] **The first installed trial** (11-09 20:10, a fresh session): a good change saved; a wrong Edit and a `sed -i` refused word for word; the old note byte-identical. The style note did not arrive there (that session was started by a session, not typed)
-- [ ] **The style note seen arriving** in a session he types into
 - [ ] **Repeats removed** only when each replacement is followed unaided
 - [x] **Turn on the checks**: done 11-09 20:07 (session-lights 0.3.0 + his style note)
 - [x] **0.1.11 written up** (11-09): issues #68–#74 opened, changelog, README, version, 382 checks
 - [x] **0.1.11 out on GitHub** (11-09 21:30): tag `4743181` pushed by release.sh, Release Latest with signed files, #68–#74 closed with explanations; PACKAGING.md fix `08f0a27` (heard and memcheck need python)
 - [x] **AUR recipe 0.1.11-1 built locally** (`4e13cbc`, not pushed): checksum, signature and 382 checks in `check()` pass
-- [ ] **His test:** `testing/20261109 - Test Matrix for mindForge v0-1-11.md`, A1–A7 (as of 2026-11-09: not started) → on his pass, the one AUR push and the results committed
+- [x] **His test of 0.1.11** (11-09 21:32–21:40): A1–A6 pass; A7: the style note arrived word for word in a session he typed into (the last open proof), and found **F-1 #75**: another session's slip reached the new session
+- [x] **The style note seen arriving** in a session he types into (A7, 11-09 21:40)
+- [x] **F-1 fixed** (`5ae5c93`): slips per session; 6 checks, seen failing on 0.1.11; 388 checks
+- [ ] **0.1.12 out**: tag, Release, AUR recipe built → **his test** `testing/20261109 - Test Matrix for mindForge v0-1-12.md` (as of 2026-11-09: not started) → the one AUR push (0.1.12-1), #75 closed
 
 ## Found 2026-10-22 — the CLAUDE.md review
 *Spotted while writing this project's CLAUDE.md; the maintainer asked for them on the board.*
