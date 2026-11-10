@@ -53,7 +53,9 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [ ] **Repeats removed** only when each replacement is followed unaided
 - [x] **Turn on the checks**: done 11-09 20:07 (session-lights 0.3.0 + his style note)
 - [x] **0.1.11 written up** (11-09): issues #68–#74 opened, changelog, README, version, 382 checks
-- [ ] **0.1.11 out**: tag + push, GitHub Release, issues closed, AUR recipe built locally → **his install test** → the one AUR push
+- [x] **0.1.11 out on GitHub** (11-09 21:30): tag `4743181` pushed by release.sh, Release Latest with signed files, #68–#74 closed with explanations; PACKAGING.md fix `08f0a27` (heard and memcheck need python)
+- [x] **AUR recipe 0.1.11-1 built locally** (`4e13cbc`, not pushed): checksum, signature and 382 checks in `check()` pass
+- [ ] **His test:** `testing/20261109 - Test Matrix for mindForge v0-1-11.md`, A1–A7 (as of 2026-11-09: not started) → on his pass, the one AUR push and the results committed
 
 ## Found 2026-10-22 — the CLAUDE.md review
 *Spotted while writing this project's CLAUDE.md; the maintainer asked for them on the board.*
