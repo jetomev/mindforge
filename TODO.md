@@ -1,7 +1,7 @@
 # mindForge — the list
 
-**Current release: v0.1.10** (19 Oct 2026) — everything open except v0.2.0 (#44 #47 #28 #23 #25 #26 #30), the same evening as **v0.1.9**, the laptop batch (#65 #38 #15 #31 #18 #19 #21 #17 #20 #64 #66). Both: GitHub Release with signed files, v0.1.10 Latest. **AUR: 0.1.10-1 pushed (`968bcd9`) after the maintainer's install test** (`testing/20261019 - Test Matrix for mindForge v0-1-10.md`, part A, all pass).
-**Tests:** `bash testing/run-tests.sh`, 293 checks, all passing, 1 could not look on Linux (19 Oct 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
+**Current release: v0.1.11** (9 Nov 2026) — the brain, part 1 (#68–#74). GitHub first; **AUR waits for the maintainer's local install test**, then one push. Before it: **v0.1.10** (19 Oct 2026), AUR 0.1.10-1 (`968bcd9`).
+**Tests:** `bash testing/run-tests.sh`, 382 checks, all passing, 1 could not look on Linux (9 Nov 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
@@ -29,9 +29,31 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **Applied, exactly the passed papers** (11-07 09:05–09:08, backups in `~/.claude/backups/*-20261107-090535-mindforge`): the card add-on off (one settings line); his agreement and the release rules match the AFTER copies (56 → 59 lines, nothing removed); 34 rule notes point to their home with the words that stand there (each accepted by the real guard)
 - [x] **The 21 rules got homes** (11-09, the reviewers chose this over a partial guard): each placed in the rules file that owns it, in his words as typed, Claude's own lessons labeled as lessons; lines only added, backups in `~/.claude/backups/rule-homes-20261109-170920`; no repeated note emptied. All 56 rule notes now pass the real guard on an ordinary edit
 - [x] **The 21 placements checked** (11-09 17:03–17:21, four rounds): his testing line stays a preference, both game copies say the game is paused, "[n]ameKit" left unresolved, originals never seen are marked as such; 56 of 56 notes differ from their backups by the pointer alone; guard trials 12 of 12
-- [ ] **FIRST NEXT TIME: a fresh session shows the new lines arriving** (it needs his word to open one; the guard stays OFF and every repeat stays until it has). As of 2026-11-09: not done. The work is on branch `brain`, pushed, not merged into main
-- [ ] **Turn on the checks** (after that proof): the session-lights add-on's new version + his style note
-- [ ] **Release 0.1.11**: issues opened and closed, README, changelog, his test, then the one AUR push
+- [x] **A fresh session shows the new lines arriving** (11-09 19:08, a new session with no tools quoted all five test lines word for word; proves it receives them, not that it follows them)
+- [x] **The proof checked by the reviewers** (11-09 19:09): the five quotes pass; the guard needs a trial as it will really run
+- [x] **Branch `brain` merged into main, locally** (`e942ab5`, not pushed), so the real command has the guard's check; the morning warnings and the no-second-reply change are live; the guard is NOT on
+- [x] **The guard tested as it will run** (11-09): real add-on code, the real `mindforge` command, the real memory folder: 4 good changes pass, 7 wrong ones refused. A check that breaks lets the note through, said plainly
+- [x] **That trial checked** (11-09 19:19): 11 trials pass; sent back: a broken, stalled or missing check must stop the write
+- [x] **The repair** (add-on copy, 11-09): only a clear "fine" lets a memory write through; 5 broken-check cases stop it and the note stays as it was (seen failing on the code before); the 11 real-conditions trials still pass
+- [x] **The repair checked** (11-09 19:24): passed on reading; sent back: close the typed route, prove a wrong change leaves the note alone, put the warnings in the rules
+- [x] **The typed route closed** (`6e4462a`, local; add-on copy): `memcheck --shell` refuses commands that change a memory file (977 of 1,600 past commands did), fails closed; 16 trials through the real command; real notes' checksums unchanged; the four warnings are in the book's rules (uncommitted there)
+- [x] **That checked** (11-09 19:31): warnings pass; sent back: close both ways around the guard
+- [x] **Both ways closed** (`effdaf7`, `de48592`, local; add-on copy): a saved script is read before it runs, a bare name from inside the folder counts; 22 real-conditions trials pass, notes byte-identical; 1 mistaken stop among 1,587 real scripts. What reading can never close is written down
+- [x] **That checked** (11-09 19:40): both routes pass; sent back: stop them too when the check breaks, write the three limits down
+- [x] **Stopped when broken, and written down** (`a573a07`, local; add-on copy): with the check broken, only a short list of harmless commands still runs; 58 add-on trials pass (28 fail on the code before); notes byte-identical; the three limits are in the code, README and METHOD
+- [x] **That checked** (11-09 19:45): warning passes; sent back: allow by what an operation does, not by name
+- [x] **Allowed by operation** (`5640e89`, local; add-on copy): with the check broken only reading survives; a real patch against a real note is refused and the note's fingerprint is unchanged; 126 add-on trials, 382 checks
+- [x] **That checked** (11-09 19:50): two last changes: `date` joined spelling, `git` off the list
+- [x] **Done** (add-on copy): `git` and `date` are off the broken-check list; 146 add-on trials
+- [x] **The reviewers passed it** (11-09 19:54): no repair remains; switching on is allowed for the first real trial
+- [x] **His yes** (11-09, typed here: "All plan is good. go!")
+- [x] **Switched on** (11-09 20:07): session-lights 0.3.0 installed (backup kept), his style note in place
+- [x] **The first installed trial** (11-09 20:10, a fresh session): a good change saved; a wrong Edit and a `sed -i` refused word for word; the old note byte-identical. The style note did not arrive there (that session was started by a session, not typed)
+- [ ] **The style note seen arriving** in a session he types into
+- [ ] **Repeats removed** only when each replacement is followed unaided
+- [x] **Turn on the checks**: done 11-09 20:07 (session-lights 0.3.0 + his style note)
+- [x] **0.1.11 written up** (11-09): issues #68–#74 opened, changelog, README, version, 382 checks
+- [ ] **0.1.11 out**: tag + push, GitHub Release, issues closed, AUR recipe built locally → **his install test** → the one AUR push
 
 ## Found 2026-10-22 — the CLAUDE.md review
 *Spotted while writing this project's CLAUDE.md; the maintainer asked for them on the board.*
@@ -53,7 +75,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **The maintainer's install test of 0.1.10-1** passed 18:26–18:32 (part A, A9 = a fresh session's briefing with R1-R12) → **AUR 0.1.10-1 pushed `968bcd9`** (one push, with 0.1.9-1 `5ed2124`) → #64 and #66 closed. 12 issues open, all v0.2.0 or waiting for the laptop.
 - [ ] **The laptop's run** (the v0.1.9 matrix, part B, on 0.1.10) → closes #15 #21 #38 #65, or files W-15…
 - [ ] **#67** · `wrap --previous` closed a 2-minute churn row (the maintainer's A9 test session) instead of the 17:43–18:32 session the brief named (found 2026-10-19 18:36; repaired with `log --drop-last`). Shape: print the row before closing it, refuse one shorter than 30 min unless `--row <date> <start>` names it. Next version.
-- [ ] **R12 should skip `archive_index_*` files** like R4 and R7 do: an archived copy of a handoff file that still declares `rewritten_by: session` would be flagged forever (found 2026-10-19 while archiving the real one; the archive's line was removed by hand). Next version.
+- [x] **R12 should skip `archive_index_*` files** (fixed on branch `brain`, 11-09) like R4 and R7 do: an archived copy of a handoff file that still declares `rewritten_by: session` would be flagged forever (found 2026-10-19 while archiving the real one; the archive's line was removed by hand). Next version.
 - [ ] **The seven older vault notes** `mindforge scrub --vault` lists: the maintainer judges each; one cleared is added to its term's line in scope.txt.
 
 ## 2026-10-12 · The 0.1.8 batch

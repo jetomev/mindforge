@@ -2,18 +2,20 @@
 
 Newest first.
 
-## Unreleased
+## v0.1.11 — 2026-11-09
 
-- 🧠 **The brain, part 1 (0.1.11): agreements that are not missed.** From an audit of one night of missed agreements (`docs/AUDIT-2026-11-06.md`), each change checked line by line against the maintainer's own words before it was built, and every one of them dropped where it added something he never asked for.
-  - **Warnings escalate again.** The "N sessions -- fix it" escalation matched a finding's exact text, and the text carries a number that moves daily, so it never reached three: the same warnings repeated in yellow for five sessions. Findings are now counted by rule and subject. 4 checks, seen failing on the old build.
-  - **R7 by summary.** A memory note whose `description:` changed since the index was written is named on its own line; notes whose details changed under the same summary are still named, apart. Body edits no longer read as a summary change. 7 checks.
-  - **R9 counts lines.** The loader reads the first 200 lines or 25 KB of the index; R9 counted bytes only. Warned past 180 lines (`MINDFORGE_MEMORY_MAX_LINES`). 2 checks.
-  - **`mindforge heard`**: the person's style note before each reply, and the correction catcher (logged to `drift.log`; wrap lists them). Patterns calibrated on 12,000 lines of the maintainer's past messages (17 hits, ~10 real corrections). 16 checks.
-  - **`mindforge tone` notes instead of blocking.** No hook sees a reply before it is shown; blocking made the assistant write it twice. The slip goes to the next turn's note. 4 checks.
-  - **`mindforge memcheck`**: rules do not live in memory. A note that holds one names its home file and quotes the words that stand there (a missing or wrong home is refused); a new "still to happen" line carries its date. Replays of the night's two memory mistakes are refused. 12 checks.
-  - **The test harness** no longer trips its isolation check on the app add-ons' own files in the state folder.
+**The brain, part 1: agreements that are not missed.** v0.1.10 had 293 checks; this release has 382, all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0 (no linter in this repo; nothing new).
+
+- 🧠 **From an audit of one night of missed agreements** (`docs/AUDIT-2026-11-06.md`), each change checked line by line against the maintainer's own words before it was built, and every one of them dropped where it added something he never asked for.
+  - **Warnings escalate again (#68).** The "N sessions -- fix it" escalation matched a finding's exact text, and the text carries a number that moves daily, so it never reached three: the same warnings repeated in yellow for five sessions. Findings are now counted by rule and subject. 4 checks, seen failing on the old build.
+  - **R7 by summary (#69).** A memory note whose `description:` changed since the index was written is named on its own line; notes whose details changed under the same summary are still named, apart. Body edits no longer read as a summary change. 7 checks.
+  - **R9 counts lines (#70).** The loader reads the first 200 lines or 25 KB of the index; R9 counted bytes only. Warned past 180 lines (`MINDFORGE_MEMORY_MAX_LINES`). 2 checks.
+  - **`mindforge memcheck` (#71)**: rules do not live in memory. A note that holds one names its home file and quotes the words that stand there (a missing or wrong home is refused); a new "still to happen" line carries its date. Replays of the night's two memory mistakes are refused. **`--shell`** does the same for a typed command: redirects, in-place edits, copies, patches and the like into memory are refused, and a saved script is read (one level deep) before it runs. The caller stops a write when the check breaks; with it broken, only reading commands run. **Its limits, in writing:** reading a command can never catch a path put together while a program runs, a compiled program that writes to memory, or a script more than one level down.
+  - **`mindforge tone` notes instead of blocking (#72).** No hook sees a reply before it is shown; blocking made the assistant write it twice. The slip goes to the next turn's note (`MINDFORGE_TONE=block` keeps the old behaviour). 4 checks.
+  - **`mindforge heard` (#72, #73)**: the person's style note before each reply, and the correction catcher (logged to `drift.log`; wrap stays open until each has a cause logged). Patterns calibrated on 12,000 lines of the maintainer's past messages (17 hits, ~10 real corrections). 16 checks.
+  - **R12 skips archived copies (#74)** of the every-session file, as R4 and R7 already do.
+  - **The test harness** no longer trips its isolation check on the app add-ons' own files in the state folder, and no longer spells out a memory folder (the new guard stopped it).
   - Called by the session-lights add-on, which every session already loads, so nothing new is installed by hand.
-  - 347 checks (was 302), all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0 (no linter in this repo; nothing new).
 
 - 🗺 **A step's progress lines reach its board.** Lines indented under a TODO step that are not steps themselves (`  - built on Monday`, `    Progress: …`) now join that step's detail on the page. Progress had been written there on purpose, so the step's first words (its id, which links it to other boards) never change, and no board showed it. 2 checks, the first seen failing on the old code; 302 checks.
 - 🗺 **Boards: every project's page beside the chat.** The maintainer: *"all projects need their own project
