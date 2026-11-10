@@ -1293,6 +1293,8 @@ if begin "R12: the every-session file (#28)"; then
   printf '%s\t10:00\t12:00\twork\tb\twrapped\n' "$y" >> "$SB/state/sessions.log"
   touch -d "$y 09:00" "$SB/mem/plan.md"; touch -d "$y 09:00" "$SB/mem/MEMORY.md"
   out=$(mf rot)
+  printf -- '---\nrewritten_by: session\n---\nold plan\n' > "$SB/mem/archive_index_plan_20260101.md"; touch -d '2026-01-01' "$SB/mem/archive_index_plan_20260101.md"
+  check "an archived copy is never flagged" bash -c '! grep -q "R12.*archive_index" <<<"$1"' _ "$(mf rot)"
   check "written before the last session began: R12" grep -q 'R12.*plan.md is rewritten every session, but was last written .* before the last session began' <<<"$out"
   touch -d "$y 11:00" "$SB/mem/plan.md" "$SB/mem/MEMORY.md"
   check "rewritten during it: quiet"           bash -c '! grep -q R12 <<<"$1"' _ "$(mf rot)"

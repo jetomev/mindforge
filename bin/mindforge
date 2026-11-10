@@ -592,7 +592,10 @@ prefetch_refs() {
 # against the session. These are the files that declare it.
 handoff_files() {
   [ -d "$MEM" ] || return 0
-  grep -lE '^[[:space:]]*rewritten_by:[[:space:]]*session[[:space:]]*$' "$MEM"/*.md 2>/dev/null
+  # An archived copy keeps the handoff's frontmatter but is never rewritten:
+  # R12 flagged each one forever (filed 2026-10-19, seen again 2026-11-09).
+  grep -lE '^[[:space:]]*rewritten_by:[[:space:]]*session[[:space:]]*$' "$MEM"/*.md 2>/dev/null \
+    | grep -v '/archive_index_'
 }
 # The start ("YYYY-MM-DD HH:MM") of the last session that counts: a wrapped one,
 # or one that lasted MINDFORGE_HANDOFF_MIN minutes (30) -- Desktop's short
