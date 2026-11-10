@@ -1,6 +1,6 @@
 # mindForge — the list
 
-**Current release: v0.1.12** (9 Nov 2026) — hotfix F-1 (#75) from the maintainer's test of **v0.1.11** (the brain, part 1, #68–#74, same evening). GitHub first; **AUR: 0.1.12-1 waits for his test** (0.1.11-1 is never pushed). Before: v0.1.10 (19 Oct 2026), AUR 0.1.10-1 (`968bcd9`).
+**Current release: v0.1.12** (9 Nov 2026) — hotfix F-1 (#75) from the maintainer's test of **v0.1.11** (the brain, part 1, #68–#74, same evening). **AUR: 0.1.12-1 pushed (`adaccbf`) after his test passed** (A1–A7); 0.1.11-1 never went to the AUR. Before: v0.1.10 (19 Oct 2026).
 **Tests:** `bash testing/run-tests.sh`, 388 checks, all passing, 1 could not look on Linux (9 Nov 2026). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit. **His test of the installed package:** `bash scripts/test-installed.sh`.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
@@ -57,7 +57,7 @@ mindForge is the start-of-session briefing and end-of-session record for working
 - [x] **His test of 0.1.11** (11-09 21:32–21:40): A1–A6 pass; A7: the style note arrived word for word in a session he typed into (the last open proof), and found **F-1 #75**: another session's slip reached the new session
 - [x] **The style note seen arriving** in a session he types into (A7, 11-09 21:40)
 - [x] **F-1 fixed** (`5ae5c93`): slips per session; 6 checks, seen failing on 0.1.11; 388 checks
-- [ ] **0.1.12 out**: tag, Release, AUR recipe built → **his test** `testing/20261109 - Test Matrix for mindForge v0-1-12.md` (as of 2026-11-09: not started) → the one AUR push (0.1.12-1), #75 closed
+- [x] **0.1.12 out** (11-09): tag `f6a8142`, Release Latest; his test A1–A7 passed 21:52–21:55 (`testing/20261109 - Test Results for mindForge v0-1-12.md`); **AUR 0.1.12-1 pushed `adaccbf`**, page shows it, published recipe = tested recipe; #75 closed
 
 ## Found 2026-10-22 — the CLAUDE.md review
 *Spotted while writing this project's CLAUDE.md; the maintainer asked for them on the board.*
