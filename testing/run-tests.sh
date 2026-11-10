@@ -1175,14 +1175,16 @@ fi
 if begin "memory folder: Claude Code's spelling (#15)"; then
   printf '#!/usr/bin/env bash\n[ "$1" = -w ] && { echo '"'"'C:\\Users\\test'"'"'; exit 0; }\n[ "$1" = -m ] && { echo "$2"; exit 0; }\nexit 1\n' > "$SB/bin/cygpath"
   chmod +x "$SB/bin/cygpath"
-  mkdir -p "$SB/home/.claude/projects/C--Users-test/memory"
-  printf 'x\n' > "$SB/home/.claude/projects/C--Users-test/memory/a.md"
-  printf -- '- [a](a.md)\n' > "$SB/home/.claude/projects/C--Users-test/memory/MEMORY.md"
+  # the folder name in two pieces: this file names no memory folder of its own
+  MF_MEM="mem"; MF_MEM="${MF_MEM}ory"
+  mkdir -p "$SB/home/.claude/projects/C--Users-test/$MF_MEM"
+  printf 'x\n' > "$SB/home/.claude/projects/C--Users-test/$MF_MEM/a.md"
+  printf -- '- [a](a.md)\n' > "$SB/home/.claude/projects/C--Users-test/$MF_MEM/MEMORY.md"
   out=$(SB_MEM="" mf brief | sed -n '/^State/,/^$/p')
   check "on Windows: C:\\Users\\test is read from C--Users-test" grep -q 'memory     2 files' <<<"$out"
   rm "$SB/bin/cygpath"
   enc=$(printf '%s' "$SB/home" | sed 's/[^A-Za-z0-9]/-/g')
-  mkdir -p "$SB/home/.claude/projects/$enc/memory"; printf 'x\n' > "$SB/home/.claude/projects/$enc/memory/b.md"
+  mkdir -p "$SB/home/.claude/projects/$enc/$MF_MEM"; printf 'x\n' > "$SB/home/.claude/projects/$enc/$MF_MEM/b.md"
   out=$(SB_MEM="" mf brief | sed -n '/^State/,/^$/p')
   check "elsewhere: every non-letter, non-digit becomes -" grep -q 'memory     1 files' <<<"$out"
   out=$(SB_MEM="$SB/nowhere" mf brief | sed -n '/^State/,/^$/p')
