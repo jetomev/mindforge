@@ -1026,6 +1026,32 @@ if begin "memcheck: the night's failures are refused"; then
   end
 fi
 
+# 0.1.11 · memcheck --shell: the typed route into memory (the reviewers, 2026-11-09).
+shell_json() { "$PY" -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$1"; }
+if begin "memcheck --shell"; then
+  M='~/.claude/projects/-home-x/memory'
+  refused() { out=$(shell_json "$2" | mf memcheck --shell); rc=$?; check "$1: refused" cond '[ "$rc" -eq 1 ] && grep -q "changes a memory file" <<<"$out"'; }
+  allowed() { out=$(shell_json "$2" | mf memcheck --shell); rc=$?; check "$1: allowed" cond '[ "$rc" -eq 0 ] && [ -z "$out" ]'; }
+  refused "a redirect"              "echo hi > $M/a.md"
+  refused "an append after cd"      "cd $M && echo hi >> b.md"
+  refused "sed -i, | in the quotes" "sed -i 's|a|b|' $M/MEMORY.md"
+  refused "a loop after cd"         "cd $M && for f in a*.md; do sed -i 's/a/b/' \"\$f\"; done"
+  refused "a path held in a name"   "M=$M; cp /tmp/x \$M/a.md"
+  refused "inline python"           "python3 -c 'open(\"$M/a.md\",\"w\").write(\"x\")'"
+  refused "tee"                     "echo x | tee $M/a.md"
+  refused "rm"                      "rm $M/a.md"
+  refused "mv"                      "mv /tmp/x $M/a.md"
+  allowed "reading"                 "cat $M/a.md"
+  allowed "sed -n"                  "sed -n 1,3p $M/a.md"
+  allowed "a copy out"              "cp $M/a.md /tmp/x"
+  allowed "output elsewhere"        "grep -c x $M/*.md > /tmp/out"
+  allowed "errors to nowhere"       "ls $M 2>/dev/null"
+  allowed "no memory named"         "echo hi > /tmp/a.md"
+  out=$(printf 'not json' | mf memcheck --shell); rc=$?
+  check "unreadable input: could not look (2)" cond '[ "$rc" -eq 2 ] && grep -q "not checked" <<<"$out"'
+  end
+fi
+
 # #37 · The active project's banner. The pointer used to be a hand-edited
 # file that nothing moved; now `wrap` moves it to the project the focus
 # names, and the banner says so when the pointer and the last wrapped
