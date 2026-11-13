@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Unreleased
+- **fix(marks): a chat still open keeps its start mark (F-2).** The sweep deleted every mark older than
+  `MINDFORGE_MARK_TTL_H` (12 hours), and any session's start runs it. Desktop chats stay open for days, so a live
+  chat lost its start: its wrap then added a second row with the wrong start instead of replacing the first. A mark
+  is now kept while its session's transcript (`<config>/projects/*/<id>.jsonl`) was written within the cutoff; a
+  silent one is still swept. 3 new checks, seen failing on 0.1.12 first. 391 checks.
+
 ## v0.1.12 — 2026-11-09
 
 **A hotfix from the maintainer's test of 0.1.11, the same evening.** 388 checks (was 382), all passing, 1 could not look on Linux (the PowerShell wrapper). Warnings: 0. 0.1.11 never reaches the AUR; 0.1.12-1 is the one push, after its own test.

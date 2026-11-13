@@ -1062,9 +1062,22 @@ pick_mark() {
 
 # Marks outlive sessions that died without firing SessionEnd. Sweep anything
 # older than the cutoff so pick_mark() cannot select a corpse.
+# F-2 · ...but age alone does not mean dead. Desktop chats stay open for days,
+# and the sweep (run by ANY session's start) deleted a live chat's mark at 12
+# hours, so its wrap added a second row with the wrong start. A mark is kept
+# while its session's transcript was written within the cutoff.
 sweep_marks() {
   [ -d "$MARKS" ] || return 0
-  find "$MARKS" -maxdepth 1 -type f -mmin "+$(( ${MINDFORGE_MARK_TTL_H:-12} * 60 ))" -delete 2>/dev/null || true
+  local ttl=$(( ${MINDFORGE_MARK_TTL_H:-12} * 60 )) m id
+  while IFS= read -r m; do
+    id=${m##*/}
+    if [ "$id" != _nosession ] && [ -d "$CLAUDE_DIR/projects" ] && \
+       [ -n "$(find "$CLAUDE_DIR/projects" -mindepth 2 -maxdepth 2 -name "$id.jsonl" -mmin "-$ttl" -print -quit 2>/dev/null)" ]; then
+      continue                                   # still writing: alive, however old its mark
+    fi
+    rm -f -- "$m"
+  done < <(find "$MARKS" -maxdepth 1 -type f -mmin "+$ttl" 2>/dev/null)
+  return 0
 }
 
 # F-8 · The visible channel that actually works on both surfaces.

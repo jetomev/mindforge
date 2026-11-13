@@ -190,6 +190,25 @@ if begin "session-start"; then
   end
 fi
 
+# F-2 · The sweep deleted any mark older than 12 hours, even the mark of a chat still
+# open. Desktop chats stay open for days, so the next session-start (any chat) wiped a
+# live chat's start: its wrap then added a second row with the wrong start (seen in a
+# real office, 11-12). A chat still writing its transcript is alive, however old its mark.
+if begin "sweep: live chat keeps its mark"; then
+  mkdir -p "$SB/state/marks" "$SB/home/.claude/projects/-sb"
+  printf '2026-09-17\t20:00\n' > "$SB/state/marks/live-chat"
+  printf '2026-09-17\t20:00\n' > "$SB/state/marks/dead-chat"
+  touch -d '20 hours ago' "$SB/state/marks/live-chat" "$SB/state/marks/dead-chat"
+  echo '{}' > "$SB/home/.claude/projects/-sb/live-chat.jsonl"            # written just now
+  echo '{}' > "$SB/home/.claude/projects/-sb/dead-chat.jsonl"
+  touch -d '20 hours ago' "$SB/home/.claude/projects/-sb/dead-chat.jsonl" # silent as long as its mark
+  mf session-start >/dev/null
+  check "an open chat's old mark survives" [ -r "$SB/state/marks/live-chat" ]
+  check "a dead chat's old mark is swept"  [ ! -e "$SB/state/marks/dead-chat" ]
+  check "this session still gets its mark" [ -r "$SB/state/marks/$SID" ]
+  end
+fi
+
 # #46 (W-12) · the NEXT column was cut at 42 characters, mid-word. It follows the terminal's
 # width and cuts at a word with an ellipsis; off a terminal nothing is cut.
 if begin "brief: NEXT column"; then
