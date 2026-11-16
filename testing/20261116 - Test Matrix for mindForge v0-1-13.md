@@ -20,3 +20,4 @@ Mark each row ✅ pass · ❌ fail (paste what you saw) · — not applicable.
 | A8 | (follow-up, does not hold the AUR) the next morning, the desk chat opened 2026-11-16 18:09 still has its start mark | its wrap replaces its own row instead of adding a second one | |
 
 ## Verdict
+A1–A7 pass (see the results file of the same date).
