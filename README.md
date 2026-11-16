@@ -12,13 +12,13 @@ cannot be forgotten because it does not depend on remembering.
 
 📖 **[Read the method](docs/METHOD.md)** — the doctrine. The scripts are the easy part.
 
-> **Status: v0.1.12, ten weeks in.** Built and dogfooded on Arch Linux with
+> **Status: v0.1.13, eleven weeks in.** Built and dogfooded on Arch Linux with
 > [Claude Code](https://claude.com/claude-code), in a terminal *and* in Claude
 > Desktop — the briefing is verified identical on both. A second machine, a
 > Windows laptop running Git Bash, has used it since mid-September and found
 > fourteen defects of its own; with 0.1.9 every one has a fix, and the
 > Windows-only ones wait for that laptop's next run to be proven there. Its
-> **automated test suite** has 388 checks. Every check it makes
+> **automated test suite** has 391 checks. Every check it makes
 > answers yes, no, or *could not look* — never two answers where three are
 true. Still: one user, and we publish early and say so.
 
@@ -347,7 +347,7 @@ corrections kept coming; since 0.1.11 `heard` logs a correction as it is typed,
 but that is days old, so drift instrumentation is a designed mechanism, not a
 proven result. The memory guard (`memcheck`) passed its first installed trial
 on 2026-11-09; one trial is not a track record. One user, one
-assistant. The **automated suite** (`bash testing/run-tests.sh`, 388 checks)
+assistant. The **automated suite** (`bash testing/run-tests.sh`, 391 checks)
 covers the closeout, the queue, session start, the headline, the scrub hook,
 the release script, R11, the tie alert, the chime, the active project, one repo
 seen under two spellings of its path, the hooks command, the Windows memory

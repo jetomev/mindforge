@@ -1,16 +1,17 @@
 # mindForge — the list
 
-**Current release: v0.1.12** (9 Nov 2026) — hotfix F-1 (#75) from the maintainer's test of **v0.1.11** (the brain, part 1, #68–#74, same evening). **AUR: 0.1.12-1 pushed (`adaccbf`) after his test passed** (A1–A7); 0.1.11-1 never went to the AUR. Before: v0.1.10 (19 Oct 2026).
-**Tests:** `bash testing/run-tests.sh`, 391 checks, all passing, 1 could not look on Linux (12 Nov 2026, F-2 unreleased). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit. **His test of the installed package:** `bash scripts/test-installed.sh`.
+**Current release: v0.1.13** (16 Nov 2026) — hotfix F-2 (#77), a chat left open for days lost its start mark. **AUR: 0.1.13-1 waits on the maintainer's test of the installed package.** Before: v0.1.12 (9 Nov 2026, F-1 #75; AUR 0.1.12-1 `adaccbf` after his test).
+**Tests:** `bash testing/run-tests.sh`, 391 checks, all passing, 1 could not look on Linux (16 Nov 2026, v0.1.13). **Release with `bash scripts/release.sh X.Y.Z`** after the docs commit. **His test of the installed package:** `bash scripts/test-installed.sh`.
 mindForge is the start-of-session briefing and end-of-session record for working with an AI companion. It tells each new session what happened last time and what is still open, so nothing depends on one conversation remembering.
 
 **Updated after every step.** The full story behind each item is in its GitHub issue.
 
 ---
-## 2026-11-12 · F-2: an open chat keeps its start mark (unreleased)
+## 2026-11-12 · F-2: an open chat keeps its start mark (v0.1.13)
 *Found by a real office run, confirmed in the code: the sweep deleted any mark older than 12 hours, even a live chat's.*
 - [x] **F-2 fixed** (#77): a mark is kept while its session's transcript was written within the cutoff; 3 new checks, seen failing on 0.1.12 first; 391 checks, all passing
 - [ ] **Release v0.1.13** (hotfix): docs commit + `bash scripts/release.sh 0.1.13`, then the maintainer's test of the installed package, then the AUR; close #77 with the release
+  - 2026-11-16: started on the maintainer's "release mindforge 0.1.13 now"; 391 checks pass, 1 could not look, 0 warnings
 
 ## 2026-11-06 · The brain (0.1.11) — no more missed agreements
 *The maintainer, 11-06: "check where mindforge is making mistakes… let's make mindForge the brain… get it done before Sunday." Building on branch `brain` in a side copy (`~/.cache/mindforge-dev/brain`), so nothing live changes until his yes and his test. Full write-up: `docs/AUDIT-2026-11-06.md`.*
